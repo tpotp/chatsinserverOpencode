@@ -232,8 +232,8 @@
               else if (msg[0] === "EOSE") { this.relayReady = true; this.updateRelayStatus(); }
             } catch {}
           };
-          ws.onerror = () => { dot.className = 'rdot fail'; };
-          ws.onclose = () => { dot.className = 'rdot fail'; this.nostrSockets[url] = null; setTimeout(() => this.connectRelay(url, dot), 5000); };
+          ws.onerror = (e) => { console.error('WS error', url, e); dot.className = 'rdot fail'; };
+          ws.onclose = (e) => { console.error('WS close', url, e); dot.className = 'rdot fail'; this.nostrSockets[url] = null; setTimeout(() => this.connectRelay(url, dot), 5000); };
         } catch (e) {
           dot.className = 'rdot fail';
         }
