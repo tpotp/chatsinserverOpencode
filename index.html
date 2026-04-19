@@ -66,6 +66,7 @@
       <span>RELAYS:</span> <span id="relays-status">0/0</span>
     </div>
     <div class="relay-dots" id="relay-dots"></div>
+    <div class="debug-log" id="debug-log" style="max-height:120px;overflow-y:auto;font-size:10px;background:#000;color:#0f0;padding:8px;border-radius:8px;margin-bottom:8px;font-family:monospace;"></div>
     <div class="peers-list">
       <h3>⚡ Connected Peers</h3>
       <div id="peers-container">No peers connected</div>
@@ -113,7 +114,7 @@
         { name: "large", model: "Llama-3.1-8B-Instruct-q4f16_1-MLC", minScore: 4, mode: "assist+verify" }
       ],
       RELAY_URLS: ["wss://relay.damus.io", "wss://nos.lol", "wss://offchain.pub", "wss://relay.nostr.band/all", "wss://nostr.mom", "wss://relay.snort.social"],
-      ICE_SERVERS: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }]
+      ICE_SERVERS: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }]
     };
 
     const MSG_TYPE = { PEER_HELLO: 0x01, TOKEN_REQUEST: 0x02, TOKEN_RESPONSE: 0x03, LOGITS: 0x04, PING: 0x05, PONG: 0x06 };
@@ -141,6 +142,11 @@
         this.presenceInterval = null;
         this.helloInterval = null;
         this.rtcConnections = new Map();
+        this.debugLog = (msg) => {
+          const d = document.getElementById('debug-log');
+          if (d) { d.innerHTML += `<div>[${new Date().toISOString().slice(11,19)}] ${msg}</div>`; d.scrollTop = d.scrollHeight; }
+          console.log('[DEBUG]', msg);
+        };
         this.dataChannel = null;
         this.init();
       }
@@ -194,6 +200,7 @@
       }
 
       connectAllRelays() {
+        this.debugLog('Connecting to Nostr relays...');
         const dotsContainer = document.getElementById('relay-dots');
         for (const url of CONFIG.RELAY_URLS) {
           const dot = document.createElement('div');
@@ -211,6 +218,7 @@
           this.nostrSockets[url] = ws;
           ws.onopen = () => {
             dot.className = 'rdot ok';
+            this.debugLog('✓ ' + url);
             this.updateRelayStatus();
             const since = Math.floor(Date.now() / 1000) - 360;
             ws.send(JSON.stringify(["REQ", "p2p-sub", { kinds: [1], "#t": [CONFIG.GLOBAL_TAG], since }]));
@@ -278,10 +286,10 @@
       }
 
       addOrUpdatePeer(pubKey, data) {
-        if (!this.peers.has(pubKey) || Date.now() - this.peers.get(pubKey).lastSeen > 30000) {
-          this.peers.set(pubKey, { ...data, lastSeen: Date.now(), rtt: 0 });
-          this.updatePeersUI();
-        }
+        const isNew = !this.peers.has(pubKey);
+        this.peers.set(pubKey, { ...data, lastSeen: Date.now(), rtt: 0 });
+        this.updatePeersUI();
+        if (isNew) this.debugLog('Peer: ' + pubKey.slice(0,8) + ' tier=' + (data.deviceTier||'?'));
       }
 
       cleanupPeers() {
