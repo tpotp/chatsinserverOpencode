@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>P2P LLM - Auto-Scaling</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 12px; }
+    h1 { font-size: 1.2rem; margin-bottom: 12px; color: #58a6ff; }
+    .status-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .status-item { background: #161b22; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; }
+    .status-item .label { color: #8b949e; }
+    .status-item .value { color: #7ee787; font-weight: 600; }
+    .status-item.warning .value { color: #d29922; }
+    .status-item.error .value { color: #f85149; }
+    .chat-container { background: #161b22; border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+    .messages { height: 50vh; overflow-y: auto; padding: 12px; }
+    .message { margin-bottom: 12px; padding: 10px; border-radius: 8px; }
+    .message.user { background: #1f6feb; margin-left: 20%; }
+    .message.assistant { background: #21262d; margin-right: 20%; }
+    .message .role { font-size: 0.65rem; color: #8b949e; margin-bottom: 4px; }
+    .message .content { white-space: pre-wrap; word-break: break-word; }
+    .input-container { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #30363d; }
+    .input-container input { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; color: #c9d1d9; font-size: 0.95rem; }
+    .input-container input:focus { outline: none; border-color: #58a6ff; }
+    .input-container button { background: #238636; border: none; border-radius: 8px; padding: 10px 20px; color: white; font-weight: 600; cursor: pointer; }
+    .input-container button:disabled { background: #30363d; cursor: not-allowed; }
+    .input-container button.loading { background: #d29922; }
+    .peers-list { background: #161b22; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .peers-list h3 { font-size: 0.85rem; color: #8b949e; margin-bottom: 8px; }
+    .peer-item { display: flex; justify-content: space-between; align-items: center; padding: 6px; background: #21262d; border-radius: 6px; margin-bottom: 4px; font-size: 0.8rem; }
+    .peer-item .tier { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+    .peer-item .tier.a { background: #238636; }
+    .peer-item .tier.b { background: #1f6feb; }
+    .peer-item .tier.c { background: #d29922; color: #0d1117; }
+    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(13,17,23,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+    .loading-overlay.hidden { display: none; }
+    .loading-spinner { width: 40px; height: 40px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loading-text { margin-top: 16px; color: #8b949e; }
+    .loading-progress { width: 200px; height: 4px; background: #30363d; border-radius: 2px; margin-top: 8px; }
+    .loading-progress-bar { height: 100%; background: #58a6ff; border-radius: 2px; transition: width 0.3s; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>P2P LLM</h1>
+    <div class="status-bar">
+      <div class="status-item" id="tier-status"><span class="label">Tier:</span> <span class="value" id="tier-value">-</span></div>
+      <div class="status-item" id="mode-status"><span class="label">Mode:</span> <span class="value" id="mode-value">-</span></div>
+      <div class="status-item"><span class="label">Peers:</span> <span class="value" id="peers-value">0</span></div>
+      <div class="status-item"><span class="label">Score:</span> <span class="value" id="score-value">0</span></div>
+      <div class="status-item"><span class="label">Tokens/s:</span> <span class="value" id="tps-value">-</span></div>
+    </div>
+    <div class="peers-list">
+      <h3>Connected Peers</h3>
+      <div id="peers-container">No peers connected</div>
+    </div>
+    <div class="chat-container">
+      <div class="messages" id="messages"></div>
+      <div class="input-container">
+        <input type="text" id="chat-input" placeholder="Type your message..." autocomplete="off">
+        <button id="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+  <div class="loading-overlay" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">Initializing...</div>
+    <div class="loading-progress"><div class="loading-progress-bar" id="loading-progress-bar" style="width: 0%"></div></div>
+  </div>
+
+  <script type="module">
+    const CONFIG = {
+      defaultModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+      maxPeers: 6,
+      maxRemoteWorkers: 2,
+      maxAssistLatencyMs: 180,
+      hysteresisMs: 3000,
+      speculativeTokens: 4,
+      mobileAssistOnly: true,
+      tiers: [
+        { name: "small", model: "Llama-3.2-1B-Instruct-q4f16_1-MLC", minScore: 0, mode: "local" },
+        { name: "medium", model: "Llama-3.1-3B-Instruct-q4f16_1-MLC", minScore: 2, mode: "assist" },
+        { name: "large", model: "Llama-3.1-8B-Instruct-q4f16_1-MLC", minScore: 4, mode: "assist+verify" }
+      ],
+      useLocalRelay: true,
+      relays: [
+        "ws://localhost:3001"
+      ],
+      publicRelays: [
+        "wss://relay.damus.io",
+        "wss://nos.lol",
+        "wss://relay.nostr.band"
+      ]
+    };
+
+    const MSG_TYPE = {
+      PEER_HELLO: 0x01,
+      TOKEN_REQUEST: 0x02,
+      TOKEN_RESPONSE: 0x03,
+      LOGITS: 0x04,
+      PING: 0x05,
+      PONG: 0x06
+    };
+
+    class P2PLLM {
+      constructor() {
+        this.peerId = this.generateId();
+        this.engine = null;
+        this.currentTierIndex = 0;
+        this.currentMode = "local";
+        this.isGenerating = false;
+        this.peers = new Map();
+        this.pendingRequests = new Map();
+        this.requestId = 0;
+        this.lastTierChange = 0;
+        this.score = 0;
+        this.tokenTimes = [];
+        this.modelLoading = null;
+        this.deviceTier = this.classifyDevice();
+        this.conversation = [];
+        this.presenceInterval = null;
+        this.nostr_ws = null;
+        this.rtcConnections = new Map();
+        this.dataChannel = null;
+
+        this.init();
+      }
+
+      generateId() {
+        const arr = new Uint8Array(16);
+        crypto.getRandomValues(arr);
+        return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      classifyDevice() {
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile = /android|webos|iphone|ipad|ipod|blackberry|windows phone/i.test(ua);
+        const gpu = navigator.gpu;
+        const memory = navigator.deviceMemory || 2;
+        const cores = navigator.hardwareConcurrency || 2;
+
+        if (isMobile || memory < 4 || cores < 4) return 'c';
+        if (memory >= 8 && gpu && cores >= 8) return 'a';
+        return 'b';
+      }
+
+      async init() {
+        this.updateLoading('Initializing WebLLM...', 5);
+        await this.initWebLLM();
+        this.updateLoading('Connecting to Nostr relays...', 10);
+        await this.connectNostr();
+        this.updateLoading('Publishing presence...', 15);
+        this.startPresence();
+        this.updateLoading('Ready', 100);
+        setTimeout(() => this.hideLoading(), 500);
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') this.sendMessage();
+        });
+        document.getElementById('send-btn').addEventListener('click', () => this.sendMessage());
+
+        setInterval(() => this.computeScore(), 2000);
+        setInterval(() => this.maintainPeerConnections(), 5000);
+      }
+
+      async initWebLLM() {
+        const initProgress = (report) => {
+          if (report.progress) {
+            const pct = Math.round(report.progress * 60 + 10);
+            this.updateLoading('Loading model: ' + report.text, pct);
+          }
+        };
+
+        if (!navigator.gpu) {
+          this.updateLoading('No WebGPU - using demo mode', 50);
+          this.engine = this.createDemoEngine();
+        } else {
+          try {
+            const { CreateMLCEngine } = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.82/+esm');
+            this.engine = await CreateMLCEngine(
+              CONFIG.defaultModel,
+              { initProgressCallback: initProgress, device: 'webgpu' }
+            );
+          } catch (e) {
+            console.warn('WebLLM failed, using demo:', e);
+            this.engine = this.createDemoEngine();
+          }
+        }
+
+        this.updateStatus();
+      }
+
+      createDemoEngine() {
+        const responses = [
+          "That's interesting! Tell me more about what you're thinking.",
+          "I understand. Let me share my perspective on this.",
+          "Great question. Here's what I believe:",
+          "Thanks for sharing. I'd be happy to discuss further.",
+          "That's a fascinating point. Consider it from this angle:"
+        ];
+        return {
+          model: "Demo-Mode",
+          chat: {
+            completions: {
+              create: async (opts) => {
+                const text = responses[Math.floor(Math.random() * responses.length)];
+                return (async function*() {
+                  for (let i = 0; i < text.length; i++) {
+                    await new Promise(r => setTimeout(r, 50));
+                    yield { choices: [{ delta: { content: text[i] } }] };
+                  }
+                })();
+              }
+            }
+          }
+        };
+      }
+
+      updateLoading(text, pct) {
+        document.getElementById('loading-text').textContent = text;
+        document.getElementById('loading-progress-bar').style.width = pct + '%';
+      }
+
+      hideLoading() {
+        document.getElementById('loading').classList.add('hidden');
+      }
+
+      async connectNostr() {
+        const relaysToUse = CONFIG.useLocalRelay ? CONFIG.relays : CONFIG.publicRelays;
+        for (const relay of relaysToUse) {
+          try {
+            const ws = new WebSocket(relay);
+            ws.onopen = () => {
+              this.nostr_ws = ws;
+              this.subscribePeers();
+            };
+            ws.onmessage = (e) => this.handleNostrMessage(e);
+            ws.onerror = () => {};
+            ws.onclose = () => setTimeout(() => this.connectNostr(), 5000);
+            break;
+          } catch {}
+        }
+      }
+
+      subscribePeers() {
+        if (!this.nostr_ws || this.nostr_ws.readyState !== WebSocket.OPEN) return;
+        const filter = { kinds: [1999], '#n': ['p2p-llm'] };
+        this.nostr_ws.send(JSON.stringify(['REQ', 'peers', filter]));
+      }
+
+      publishPresence() {
+        if (!this.nostr_ws || this.nostr_ws.readyState !== WebSocket.OPEN) return;
+        const event = {
+          kind: 1999,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [['n', 'p2p-llm']],
+          content: JSON.stringify({
+            peerId: this.peerId,
+            deviceTier: this.deviceTier,
+            webgpu: !!navigator.gpu,
+            memoryMB: (navigator.deviceMemory || 2) * 1024,
+            timestamp: Date.now()
+          })
+        };
+        this.nostr_ws.send(JSON.stringify(['EVENT', event]));
+      }
+
+      startPresence() {
+        this.publishPresence();
+        this.presenceInterval = setInterval(() => this.publishPresence(), 30000);
+      }
+
+      handleNostrMessage(e) {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg[0] === 'EVENT' && msg[1]) {
+            const data = JSON.parse(msg[1].content);
+            if (data.peerId !== this.peerId && Date.now() - data.timestamp < 60000) {
+              this.addOrUpdatePeer(data);
+            }
+          }
+        } catch {}
+      }
+
+      addOrUpdatePeer(data) {
+        this.peers.set(data.peerId, {
+          ...data,
+          lastSeen: Date.now(),
+          rtt: data.rtt || 0
+        });
+        this.updatePeersUI();
+      }
+
+      maintainPeerConnections() {
+        const now = Date.now();
+        for (const [peerId, peer] of this.peers) {
+          if (now - peer.lastSeen > 120000) {
+            this.peers.delete(peerId);
+          }
+        }
+        this.updatePeersUI();
+      }
+
+      computeScore() {
+        const now = Date.now();
+        let newScore = 0;
+        const activePeers = [...this.peers.values()].filter(p => now - p.lastSeen < 60000);
+        newScore += Math.min(activePeers.length, CONFIG.maxPeers);
+
+        const avgRtt = activePeers.length > 0
+          ? activePeers.reduce((s, p) => s + (p.rtt || 0), 0) / activePeers.length
+          : 0;
+
+        if (avgRtt > CONFIG.maxAssistLatencyMs) newScore -= 1;
+        const hasTierA = activePeers.some(p => p.deviceTier === 'a');
+        if (hasTierA) newScore += 1;
+
+        this.score = Math.max(0, Math.min(6, newScore));
+        this.selectTier();
+        this.updateStatus();
+      }
+
+      selectTier() {
+        const now = Date.now();
+        if (now - this.lastTierChange < CONFIG.hysteresisMs) return;
+
+        let newTierIndex = 0;
+        for (let i = CONFIG.tiers.length - 1; i >= 0; i--) {
+          if (this.score >= CONFIG.tiers[i].minScore) {
+            newTierIndex = i;
+            break;
+          }
+        }
+
+        if (newTierIndex !== this.currentTierIndex) {
+          this.lastTierChange = now;
+          this.currentTierIndex = newTierIndex;
+          this.currentMode = CONFIG.tiers[newTierIndex].mode;
+          this.preloadModel(newTierIndex);
+        }
+      }
+
+      async preloadModel(tierIndex) {
+        const tier = CONFIG.tiers[tierIndex];
+        if (tier.model === this.engine?.model) return;
+
+        this.updateLoading('Switching to ' + tier.name + '...', 50);
+
+        try {
+const { CreateMLCEngine } = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.82/+esm');
+          const newEngine = await CreateMLCEngine(tier.model, {
+            initProgressCallback: (r) => this.updateLoading('Loading: ' + r.text, 50 + r.progress * 50),
+            device: 'webgpu'
+          });
+          this.engine = newEngine;
+          this.updateStatus();
+        } catch (e) {
+          console.error('Model switch failed:', e);
+        }
+      }
+
+      updateStatus() {
+        const tier = CONFIG.tiers[this.currentTierIndex];
+        document.getElementById('tier-value').textContent = tier.name;
+        document.getElementById('mode-value').textContent = this.currentMode;
+        document.getElementById('peers-value').textContent = this.peers.size;
+        document.getElementById('score-value').textContent = this.score;
+      }
+
+      updatePeersUI() {
+        const container = document.getElementById('peers-container');
+        if (this.peers.size === 0) {
+          container.innerHTML = 'No peers connected';
+          return;
+        }
+        container.innerHTML = [...this.peers.values()].map(p => `
+          <div class="peer-item">
+            <span>${p.peerId.slice(0, 8)}...</span>
+            <span class="tier ${p.deviceTier}">${p.deviceTier.toUpperCase()}</span>
+            <span>${(p.rtt || 0).toFixed(0)}ms</span>
+          </div>
+        `).join('');
+      }
+
+      async sendMessage() {
+        if (this.isGenerating) return;
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        this.addMessage('user', text);
+        this.isGenerating = true;
+        this.updateSendButton(true);
+
+        const btn = document.getElementById('send-btn');
+        btn.classList.add('loading');
+        btn.textContent = 'Generating...';
+
+        const startTime = performance.now();
+        let fullResponse = '';
+
+        try {
+          const messages = this.conversation.concat({ role: 'user', content: text });
+          const generator = await this.engine.chat.completions.create({
+            messages,
+            temperature: 0.7,
+            max_tokens: 256,
+            stream: true
+          });
+
+          let assistantMessage = this.addMessage('assistant', '');
+
+          for await (const chunk of generator) {
+            const content = chunk.choices?.[0]?.delta?.content || '';
+            if (content) {
+              fullResponse += content;
+              assistantMessage.querySelector('.content').textContent = fullResponse;
+              const msgs = document.getElementById('messages');
+              msgs.scrollTop = msgs.scrollHeight;
+            }
+          }
+
+          this.conversation.push({ role: 'user', content: text }, { role: 'assistant', content: fullResponse });
+          if (this.conversation.length > 20) this.conversation = this.conversation.slice(-20);
+
+          const elapsed = (performance.now() - startTime) / 1000;
+          const tps = fullResponse.length / 4 / elapsed;
+          this.tokenTimes.push(tps);
+          if (this.tokenTimes.length > 10) this.tokenTimes.shift();
+          const avgTps = this.tokenTimes.reduce((a, b) => a + b, 0) / this.tokenTimes.length;
+          document.getElementById('tps-value').textContent = avgTps.toFixed(1);
+
+        } catch (e) {
+          console.error('Generation error:', e);
+          this.addMessage('assistant', 'Error: ' + e.message);
+        }
+
+        this.isGenerating = false;
+        this.updateSendButton(false);
+        btn.classList.remove('loading');
+        btn.textContent = 'Send';
+      }
+
+      addMessage(role, content) {
+        const msgs = document.getElementById('messages');
+        const div = document.createElement('div');
+        div.className = `message ${role}`;
+        div.innerHTML = `<div class="role">${role}</div><div class="content">${content}</div>`;
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+        return div;
+      }
+
+      updateSendButton(loading) {
+        const btn = document.getElementById('send-btn');
+        btn.disabled = loading;
+        document.getElementById('chat-input').disabled = loading;
+      }
+    }
+
+    const app = new P2PLLM();
+  </script>
+</body>
+</html>
