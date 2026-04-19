@@ -122,8 +122,6 @@
       constructor() {
         this.peerId = this.generateId();
         this.pubKeyHex = "";
-        this.privKeyBytes = null;
-        this.nostrMod = null;
         this.nostrSockets = {};
         this.nostrSeen = new Set();
         this.relayReady = false;
@@ -183,24 +181,16 @@
         this.sendHello();
       }
 
-      async initNostr() {
-        try {
-          this.nostrMod = await import("https://esm.sh/nostr-tools@2/pure");
-          const saved = localStorage.getItem('p2p-llm-identity');
-          if (saved) {
-            const { priv, pub } = JSON.parse(saved);
-            this.privKeyBytes = new Uint8Array(priv);
-            this.pubKeyHex = pub;
-          } else {
-            this.privKeyBytes = this.nostrMod.generateSecretKey();
-            this.pubKeyHex = this.nostrMod.getPublicKey(this.privKeyBytes);
-            localStorage.setItem('p2p-llm-identity', JSON.stringify({ priv: Array.from(this.privKeyBytes), pub: this.pubKeyHex }));
-          }
-          document.getElementById('peer-id-value').textContent = this.pubKeyHex.slice(0, 8) + '...';
-        } catch (e) {
-          console.error('Nostr init failed:', e);
+      initNostr() {
+        const saved = localStorage.getItem('p2p-llm-identity');
+        if (saved) {
+          const { pub } = JSON.parse(saved);
+          this.pubKeyHex = pub;
+        } else {
           this.pubKeyHex = this.generateId();
+          localStorage.setItem('p2p-llm-identity', JSON.stringify({ pub: this.pubKeyHex }));
         }
+        document.getElementById('peer-id-value').textContent = this.pubKeyHex.slice(0, 8) + '...';
       }
 
       connectAllRelays() {
@@ -246,19 +236,24 @@
         if (connected > 0) { st.className = 'connected'; } else { st.className = 'searching'; }
       }
 
-      async signAndPublish(content) {
-        if (!this.nostrMod || !this.privKeyBytes) return;
-        try {
-          const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.GLOBAL_TAG]], content: JSON.stringify(content) };
-          const event = this.nostrMod.finalizeEvent(template, this.privKeyBytes);
-          this.nostrSeen.add(event.id);
-          const raw = JSON.stringify(["EVENT", event]);
-          let sent = 0;
-          for (const ws of Object.values(this.nostrSockets)) {
-            if ((ws && ws.readyState) === 1) { ws.send(raw); sent++; }
-          }
-          return sent > 0;
-        } catch (e) { return false; }
+      signAndPublish(content) {
+        if (!this.pubKeyHex) return;
+        const event = {
+          kind: 1,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [["t", CONFIG.GLOBAL_TAG]],
+          pubkey: this.pubKeyHex,
+          content: JSON.stringify(content),
+          id: this.generateId(),
+          sig: ""
+        };
+        this.nostrSeen.add(event.id);
+        const raw = JSON.stringify(["EVENT", event]);
+        let sent = 0;
+        for (const ws of Object.values(this.nostrSockets)) {
+          if ((ws && ws.readyState) === 1) { ws.send(raw); sent++; }
+        }
+        return sent > 0;
       }
 
       sendHello() {
