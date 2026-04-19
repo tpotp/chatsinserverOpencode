@@ -35,6 +35,7 @@
     .peer-item .tier.a { background: #238636; }
     .peer-item .tier.b { background: #1f6feb; }
     .peer-item .tier.c { background: #d29922; color: #0d1117; }
+    .peer-item .status { font-size: 0.65rem; }
     .relay-dots { display: flex; gap: 6px; margin-bottom: 8px; }
     .rdot { width: 8px; height: 8px; border-radius: 50%; background: #30363d; }
     .rdot.connecting { background: #d29922; }
@@ -50,6 +51,7 @@
     .network-status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #8b949e; }
     .network-status .connected { color: #238636; }
     .network-status .searching { color: #d29922; }
+    .debug-log { max-height: 120px; overflow-y: auto; font-size: 10px; background: #000; color: #0f0; padding: 8px; border-radius: 8px; margin-bottom: 8px; font-family: monospace; }
   </style>
 </head>
 <body>
@@ -66,7 +68,7 @@
       <span>RELAYS:</span> <span id="relays-status">0/0</span>
     </div>
     <div class="relay-dots" id="relay-dots"></div>
-    <div class="debug-log" id="debug-log" style="max-height:120px;overflow-y:auto;font-size:10px;background:#000;color:#0f0;padding:8px;border-radius:8px;margin-bottom:8px;font-family:monospace;"></div>
+    <div class="debug-log" id="debug-log"></div>
     <div class="peers-list">
       <h3>⚡ Connected Peers</h3>
       <div id="peers-container">No peers connected</div>
@@ -107,7 +109,7 @@
       hysteresisMs: 3000,
       speculativeTokens: 4,
       mobileAssistOnly: false,
-      GLOBAL_TAG: "p2p-llm-v1",
+      GLOBAL_TAG: "p2p-llm-chat",
       tiers: [
         { name: "small", model: "Llama-3.2-1B-Instruct-q4f16_1-MLC", minScore: 0, mode: "local" },
         { name: "medium", model: "Llama-3.1-3B-Instruct-q4f16_1-MLC", minScore: 2, mode: "assist" },
@@ -131,6 +133,7 @@
         this.currentMode = "local";
         this.isGenerating = false;
         this.peers = new Map();
+        this.peerConnections = new Map();
         this.pendingRequests = new Map();
         this.requestId = 0;
         this.lastTierChange = 0;
@@ -141,13 +144,11 @@
         this.conversation = [];
         this.presenceInterval = null;
         this.helloInterval = null;
-        this.rtcConnections = new Map();
         this.debugLog = (msg) => {
           const d = document.getElementById('debug-log');
           if (d) { d.innerHTML += `<div>[${new Date().toISOString().slice(11,19)}] ${msg}</div>`; d.scrollTop = d.scrollHeight; }
           console.log('[DEBUG]', msg);
         };
-        this.dataChannel = null;
         this.init();
       }
 
@@ -197,6 +198,7 @@
           localStorage.setItem('p2p-llm-identity', JSON.stringify({ pub: this.pubKeyHex }));
         }
         document.getElementById('peer-id-value').textContent = this.pubKeyHex.slice(0, 8) + '...';
+        this.debugLog('Identity: ' + this.pubKeyHex.slice(0,8));
       }
 
       connectAllRelays() {
@@ -218,7 +220,7 @@
           this.nostrSockets[url] = ws;
           ws.onopen = () => {
             dot.className = 'rdot ok';
-            this.debugLog('✓ ' + url);
+            this.debugLog('✓ ' + url.split('//')[1]);
             this.updateRelayStatus();
             const since = Math.floor(Date.now() / 1000) - 360;
             ws.send(JSON.stringify(["REQ", "p2p-sub", { kinds: [1], "#t": [CONFIG.GLOBAL_TAG], since }]));
@@ -230,8 +232,8 @@
               else if (msg[0] === "EOSE") { this.relayReady = true; this.updateRelayStatus(); }
             } catch {}
           };
-          ws.onerror = (e) => { console.error('WS error', url, e); dot.className = 'rdot fail'; };
-          ws.onclose = (e) => { console.error('WS close', url, e); dot.className = 'rdot fail'; this.nostrSockets[url] = null; setTimeout(() => this.connectRelay(url, dot), 5000); };
+          ws.onerror = (e) => { dot.className = 'rdot fail'; };
+          ws.onclose = (e) => { dot.className = 'rdot fail'; this.nostrSockets[url] = null; setTimeout(() => this.connectRelay(url, dot), 5000); };
         } catch (e) {
           dot.className = 'rdot fail';
         }
@@ -265,7 +267,7 @@
       }
 
       sendHello() {
-        this.signAndPublish({ type: 'hello', from: this.pubKeyHex, deviceTier: this.deviceTier, webgpu: !!navigator.gpu, memory: navigator.deviceMemory || 2, ts: Date.now() });
+        this.signAndPublish({ type: 'hello', from: this.pubKeyHex, deviceTier: this.deviceTier, webgpu: !!navigator.gpu, memory: navigator.deviceMemory || 2, hasEngine: !!this.engine, ts: Date.now() });
       }
 
       handleNostrEvent(ev) {
@@ -280,16 +282,128 @@
         let data;
         try { data = JSON.parse(ev.content); } catch (e) { return; }
         if (ev.pubkey === this.pubKeyHex) return;
-        if (data.from && data.from !== this.pubKeyHex) {
+        
+        if (data.type === 'hello') {
           this.addOrUpdatePeer(ev.pubkey, data);
+        } else if (data.type === 'chat') {
+          this.receiveChatMessage(ev.pubkey, data);
+        } else if (data.type === 'offer' || data.type === 'answer' || data.type === 'ice') {
+          this.handleSignaling(ev.pubkey, data);
         }
       }
 
       addOrUpdatePeer(pubKey, data) {
         const isNew = !this.peers.has(pubKey);
         this.peers.set(pubKey, { ...data, lastSeen: Date.now(), rtt: 0 });
+        
         this.updatePeersUI();
-        if (isNew) this.debugLog('Peer: ' + pubKey.slice(0,8) + ' tier=' + (data.deviceTier||'?'));
+        
+        if (isNew) {
+          this.debugLog('Peer: ' + pubKey.slice(0,8) + ' tier=' + (data.deviceTier||'?'));
+          if (data.hasEngine) {
+            this.connectToPeer(pubKey);
+          }
+        }
+      }
+
+      async connectToPeer(pubKey) {
+        if (this.peerConnections.has(pubKey)) return;
+        if (pubKey === this.pubKeyHex) return;
+        
+        this.debugLog('Connecting to ' + pubKey.slice(0,8));
+        
+        try {
+          const pc = new RTCPeerConnection({ iceServers: CONFIG.ICE_SERVERS });
+          this.peerConnections.set(pubKey, pc);
+          
+          pc.onicecandidate = (e) => {
+            if (e.candidate) {
+              this.signAndPublish({ type: 'ice', to: pubKey, candidate: e.candidate });
+            }
+          };
+          
+          pc.onconnectionstatechange = () => {
+            const state = pc.connectionState;
+            this.debugLog('WebRTC ' + pubKey.slice(0,8) + ': ' + state);
+            if (state === 'failed' || state === 'disconnected') {
+              this.peerConnections.delete(pubKey);
+            }
+          };
+          
+          const dc = pc.createDataChannel('chat', { ordered: true });
+          dc.onopen = () => this.debugLog('DataChannel open with ' + pubKey.slice(0,8));
+          dc.onmessage = (e) => this.handlePeerMessage(pubKey, JSON.parse(e.data));
+          
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          
+          this.signAndPublish({ type: 'offer', to: pubKey, sdp: offer.sdp });
+          
+        } catch(e) {
+          this.debugLog('WebRTC error: ' + e.message);
+        }
+      }
+
+      handleSignaling(from, data) {
+        const pubKey = data.to;
+        if (pubKey !== this.pubKeyHex) return;
+        
+        this.debugLog('Signal from ' + from.slice(0,8) + ': ' + data.type);
+        
+        let pc = this.peerConnections.get(from);
+        
+        if (!pc && data.type === 'offer') {
+          pc = new RTCPeerConnection({ iceServers: CONFIG.ICE_SERVERS });
+          this.peerConnections.set(from, pc);
+          
+          pc.ondatachannel = (e) => {
+            const dc = e.channel;
+            dc.onopen = () => this.debugLog('DataChannel from ' + from.slice(0,8));
+            dc.onmessage = (e) => this.handlePeerMessage(from, JSON.parse(e.data));
+          };
+          
+          pc.onicecandidate = (e) => {
+            if (e.candidate) {
+              this.signAndPublish({ type: 'ice', to: from, candidate: e.candidate });
+            }
+          };
+        }
+        
+        if (pc) {
+          try {
+            if (data.type === 'offer') {
+              pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+              pc.createAnswer().then(a => pc.setLocalDescription(a)).then(() => {
+                this.signAndPublish({ type: 'answer', to: from, sdp: pc.localDescription.sdp });
+              });
+            } else if (data.type === 'answer') {
+              pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+            } else if (data.type === 'ice' && data.candidate) {
+              pc.addIceCandidate(data.candidate);
+            }
+          } catch(e) {
+            this.debugLog('Signal error: ' + e.message);
+          }
+        }
+      }
+
+      handlePeerMessage(pubKey, data) {
+        if (data.type === 'chat') {
+          this.addMessage('user', data.text, data.from);
+        }
+      }
+
+      receiveChatMessage(from, data) {
+        this.addMessage('user', data.text, from);
+        
+        for (const [pubKey, pc] of this.peerConnections) {
+          if (pc.connectionState === 'connected') {
+            const dc = pc.datachannels?.[0] || Array.from(pc.datachannels || [])[0];
+            if (dc && dc.readyState === 'open') {
+              dc.send(JSON.stringify({ type: 'chat', text: data.text, from }));
+            }
+          }
+        }
       }
 
       cleanupPeers() {
@@ -297,6 +411,8 @@
         for (const [pub, peer] of this.peers) {
           if (now - peer.lastSeen > 60000) {
             this.peers.delete(pub);
+            const pc = this.peerConnections.get(pub);
+            if (pc) { pc.close(); this.peerConnections.delete(pub); }
           }
         }
         this.updatePeersUI();
@@ -313,7 +429,7 @@
             <div class="peer-item">
               <span>${(p.from || 'unknown').slice(0, 8)}...</span>
               <span class="tier ${p.deviceTier || 'c'}">${(p.deviceTier || 'c').toUpperCase()}</span>
-              <span>${p.webgpu ? 'GPU' : 'CPU'}</span>
+              <span class="status">${p.hasEngine ? '✓' : '-'}</span>
             </div>
           `).join('');
         }
@@ -324,6 +440,7 @@
         document.getElementById('webgpu-value').textContent = !!navigator.gpu;
         document.getElementById('memory-value').textContent = (navigator.deviceMemory || 2) + 'GB';
         document.getElementById('shard-role').textContent = 'primary';
+        this.debugLog('Device: ' + this.deviceTier + ' WebGPU: ' + !!navigator.gpu);
 
         const initProgress = (report) => {
           if (report.progress) {
@@ -335,12 +452,14 @@
         if (!navigator.gpu) {
           this.updateLoading('No WebGPU - using demo mode', 50);
           this.engine = this.createDemoEngine();
+          this.debugLog('Using demo mode');
         } else {
           try {
             const { CreateMLCEngine } = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.82/+esm');
             this.engine = await CreateMLCEngine(CONFIG.defaultModel, { initProgressCallback: initProgress, device: 'webgpu' });
+            this.debugLog('WebLLM loaded');
           } catch (e) {
-            console.warn('WebLLM failed, using demo:', e);
+            this.debugLog('WebLLM failed: ' + e.message);
             this.engine = this.createDemoEngine();
           }
         }
@@ -354,7 +473,8 @@
           "I understand. Let me share my perspective on this.",
           "Great question. Here's what I believe:",
           "Thanks for sharing. I'd be happy to discuss further.",
-          "That's a fascinating point. Consider it from this angle:"
+          "That's a fascinating point. Consider it from this angle:",
+          "As an AI, I think about this from multiple perspectives..."
         ];
         return {
           model: "Demo-Mode",
@@ -388,6 +508,8 @@
         let newScore = 0;
         const activePeers = [...this.peers.values()].filter(p => now - p.lastSeen < 60000);
         newScore += Math.min(activePeers.length, CONFIG.maxPeers);
+        const activeWithEngine = activePeers.filter(p => p.hasEngine).length;
+        if (activeWithEngine > 0) newScore += activeWithEngine;
         const avgRtt = activePeers.length > 0 ? activePeers.reduce((s, p) => s + (p.rtt || 0), 0) / activePeers.length : 0;
         if (avgRtt > CONFIG.maxAssistLatencyMs) newScore -= 1;
         const hasTierA = activePeers.some(p => p.deviceTier === 'a');
@@ -426,18 +548,22 @@
         const text = input.value.trim();
         if (!text) return;
         input.value = '';
-        this.addMessage('user', text);
+        this.addMessage('user', text, this.pubKeyHex);
         this.isGenerating = true;
         this.updateSendButton(true);
+        
         const btn = document.getElementById('send-btn');
         btn.classList.add('loading');
         btn.textContent = 'Generating...';
+        
+        this.signAndPublish({ type: 'chat', text, from: this.pubKeyHex });
+        
         const startTime = performance.now();
         let fullResponse = '';
         try {
           const messages = this.conversation.concat({ role: 'user', content: text });
           const generator = await this.engine.chat.completions.create({ messages, temperature: 0.7, max_tokens: 256, stream: true });
-          let assistantMessage = this.addMessage('assistant', '');
+          let assistantMessage = this.addMessage('assistant', '', 'AI');
           for await (const chunk of generator) {
             const content = chunk.choices?.[0]?.delta?.content || '';
             if (content) {
@@ -456,8 +582,7 @@
           const avgTps = this.tokenTimes.reduce((a, b) => a + b, 0) / this.tokenTimes.length;
           document.getElementById('tps-value').textContent = avgTps.toFixed(1);
         } catch (e) {
-          console.error('Generation error:', e);
-          this.addMessage('assistant', 'Error: ' + e.message);
+          this.addMessage('assistant', 'Error: ' + e.message, 'AI');
         }
         this.isGenerating = false;
         this.updateSendButton(false);
@@ -465,11 +590,12 @@
         btn.textContent = 'Send';
       }
 
-      addMessage(role, content) {
+      addMessage(role, content, from) {
         const msgs = document.getElementById('messages');
         const div = document.createElement('div');
         div.className = `message ${role}`;
-        div.innerHTML = `<div class="role">${role}</div><div class="content">${content}</div>`;
+        const label = role === 'user' ? (from === this.pubKeyHex ? 'You' : from?.slice(0,8)+'...') : 'AI';
+        div.innerHTML = `<div class="role">${label}</div><div class="content">${content}</div>`;
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
         return div;
