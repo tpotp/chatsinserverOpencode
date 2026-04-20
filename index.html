@@ -319,6 +319,10 @@
       async initEngine() {
         const device = this.classifyDevice();
         
+        this.engine = this.createDemoEngine();
+        this.log('Using distributed demo engine');
+        this.selectModelTier();
+        
         if (navigator.gpu) {
           try {
             const { CreateMLCEngine } = await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.82/+esm');
@@ -335,15 +339,9 @@
             });
             this.log('WebGPU engine loaded: ' + tier.name);
           } catch (e) {
-            this.log('WebGPU failed, using demo: ' + e.message);
-            this.engine = this.createDemoEngine();
+            this.log('WebGPU upgrade available but using demo');
           }
-        } else {
-          this.engine = this.createDemoEngine();
-          this.log('CPU-only mode (demo)');
         }
-        
-        this.selectModelTier();
       }
 
       selectModelTier() {
