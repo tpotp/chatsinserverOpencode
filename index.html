@@ -632,64 +632,15 @@ class ModelShardManager {
 
 class NeuralMeshV3 {
   constructor() {
-    this.peerId = this.generateId();
-    this.pubKeyHex = "";
     this.startTime = Date.now();
-    this.nostrSockets = {};
-    this.engine = null;
-    this.modelName = "Demo";
-    this.isGenerating = false;
     this.peers = new Map();
-    this.peerConnections = new Map();
-    this.kvCache = new Map();
-    this.messages = [];
-    this.logs = [];
-    this.conversationHistory = [];
-    
-    this.dht = new KademliaDHT(this.peerId);
-    this.gossipSub = new GossipSub(this.peerId, this.dht);
-    this.moe = new MixtureOfExperts();
-    this.fl = new FederatedLearningV2();
-    this.hierarchical = new HierarchicalAggregator();
-    this.bandwidth = new BandwidthAwareScheduler();
-    this.shardManager = new ModelShardManager();
-    
-    this.myRegion = this.hierarchical.detectRegion();
-    this.hardwareInfo = { hardware: 'CPU', compute: 1 };
-    this.totalCompute = this.hardwareInfo.compute;
-    
+    this.modelName = "Demo";
+    this.myRegion = 'NA';
     this.init();
   }
 
   generateId() {
-    const arr = new Uint8Array(16);
-    crypto.getRandomValues(arr);
-    return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  estimateComputePower() {
-    return 0;
-  }
-  
-  async detectHardware() {
-    let hw = 'CPU';
-    let compute = 1;
-    try {
-      if (navigator.gpu) {
-        const gpu = navigator.gpu.requestAdapter();
-        if (gpu) {
-          const adapter = await gpu;
-          if (adapter) {
-            hw = 'WebGPU';
-            compute = 15;
-          }
-        }
-      }
-    } catch(e) {}
-    const cores = navigator.hardwareConcurrency || 4;
-    const memory = navigator.deviceMemory || 4;
-    compute += cores * 0.5 + memory * 0.3;
-    return { hardware: hw, compute };
+    return 'id' + Date.now() + Math.random().toString(36).substr(2, 8);
   }
 
   log(msg, type = 'info') {
