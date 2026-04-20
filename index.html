@@ -833,15 +833,17 @@ class NeuralMeshV3 {
     if ($('federation-rounds')) $('federation-rounds').textContent = '0';
     if ($('experts-active')) $('experts-active').textContent = '7';
     
-    setInterval(() => {
-      if ($('uptime')) {
-        const uptime = Math.floor((Date.now() - self.startTime) / 1000);
-        $('uptime').textContent = uptime + 's';
-        $('peers-count').textContent = self.peers.size;
-      }
+    const interval = setInterval(() => {
+      try {
+        if ($('uptime') && self.startTime) {
+          const uptime = Math.floor((Date.now() - self.startTime) / 1000);
+          $('uptime').textContent = uptime + 's';
+          $('peers-count').textContent = self.peers ? self.peers.size : 0;
+        }
+      } catch(e) { clearInterval(interval); }
     }, 1000);
     
-    console.log('Main loop running');
+    console.log('Main loop running - chat ready');
   }
   
   aiResponse(userText) {
