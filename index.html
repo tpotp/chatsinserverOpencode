@@ -236,14 +236,20 @@
         });
         document.getElementById('send-btn').addEventListener('click', () => this.sendMessage());
 
-        setInterval(() => this.broadcastPresence(), 20000);
-        setInterval(() => this.cleanupPeers(), 15000);
+        setInterval(() => this.broadcastPresence(), 15000);
+        setInterval(() => this.cleanupPeers(), 20000);
         setInterval(() => this.updateStats(), 1000);
         setInterval(() => this.federatedLearning(), CONFIG.FEDERATION_INTERVAL);
         setInterval(() => this.shareCache(), CONFIG.CACHE_SHARE_INTERVAL);
         
         this.broadcastPresence();
+        
+        setTimeout(() => this.broadcastPresence(), 3000);
+        setTimeout(() => this.broadcastPresence(), 8000);
+        
         this.startMeshVisualization();
+        
+        this.log('Starting mesh visualization...');
       }
 
       updateLoading(text, pct) {
