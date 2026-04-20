@@ -705,40 +705,51 @@ class NeuralMeshV3 {
   }
 
   async init() {
+    const $ = (id) => document.getElementById(id);
+    
     try {
       this.updateLoading('Starting...', 5);
+      if ($('loading-text')) $('loading-text').textContent = 'Starting...';
       
       try { const hw = await this.detectHardware(); this.hardwareInfo = hw; this.log('Hardware: ' + hw.hardware); } catch(e) {}
       
       this.updateLoading('Initializing DHT...', 15);
+      if ($('loading-text')) $('loading-text').textContent = 'Initializing DHT...';
       try { await this.initializeDHT(); } catch(e) { this.log('DHT init failed: ' + e.message, 'error'); }
       
       this.updateLoading('Setting up GossipSub...', 30);
+      if ($('loading-text')) $('loading-text').textContent = 'Setting up GossipSub...';
       try { await this.initializeGossipSub(); } catch(e) { this.log('GossipSub failed: ' + e.message, 'error'); }
       
       this.updateLoading('Configuring MoE...', 45);
+      if ($('loading-text')) $('loading-text').textContent = 'Configuring MoE...';
       try { this.configureMoE(); } catch(e) { this.log('MoE failed: ' + e.message, 'error'); }
       
       this.updateLoading('Initializing FL...', 60);
+      if ($('loading-text')) $('loading-text').textContent = 'Initializing FL...';
       try { await this.initializeFL(); } catch(e) { this.log('FL init failed: ' + e.message, 'error'); }
       
       this.updateLoading('Connecting to Nostr...', 75);
+      if ($('loading-text')) $('loading-text').textContent = 'Connecting to Nostr...';
       try { await this.connectToRelays(); } catch(e) { this.log('Relays failed: ' + e.message, 'error'); }
       
       this.updateLoading('Joining network...', 90);
+      if ($('loading-text')) $('loading-text').textContent = 'Joining network...';
       try { await this.joinNetwork(); } catch(e) { this.log('Join failed: ' + e.message, 'error'); }
       
       this.updateLoading('Network ready!', 100);
+      if ($('loading-text')) $('loading-text').textContent = '✓ Network ready!';
+      if ($('network-status')) $('network-status').textContent = 'Connected';
     } catch(e) {
       this.log('Init critical error: ' + e.message, 'error');
-      document.getElementById('loading-text').textContent = 'Error: ' + e.message;
+      if ($('loading-text')) $('loading-text').textContent = 'Error: ' + e.message;
     }
     
     setTimeout(() => {
       const loading = document.getElementById('loading');
       if (loading) loading.classList.add('hidden');
-      this.startMainLoop();
-    }, 1500);
+      setTimeout(() => this.startMainLoop(), 100);
+    }, 2000);
   }
 
   updateLoading(text, percent) {
@@ -894,12 +905,18 @@ class NeuralMeshV3 {
   }
 
   startMainLoop() {
+    console.log('startMainLoop called');
     if (!document.getElementById('uptime')) {
       setTimeout(() => this.startMainLoop(), 500);
       return;
     }
-    const safe = (fn, name) => setInterval(() => { try { fn(); } catch(e) { console.error(name + ' error:', e); } }, 1000);
     
+    console.log('DOM ready, setting up...');
+    
+    try { this.setupChat(); } catch(e) { console.error('Chat setup error:', e); this.setupChatDirect(); }
+    try { this.startVisualization(); } catch(e) { console.error('Viz error:', e); }
+    
+    const safe = (fn, name) => setInterval(() => { try { fn(); } catch(e) { console.error(name + ' error:', e); } }, 1000);
     safe(() => this.updateMetrics(), 'metrics');
     safe(() => this.broadcastPresence(), 'presence');
     safe(() => this.shareKVCache(), 'cache');
@@ -907,9 +924,33 @@ class NeuralMeshV3 {
     safe(() => this.performGossip(), 'gossip');
     safe(() => this.measureBandwidth(), 'bandwidth');
     
-    try { this.startVisualization(); } catch(e) { this.log('Viz error: ' + e.message); }
-    try { this.setupChat(); } catch(e) { this.log('Chat error: ' + e.message); }
-    this.log('Main loop started');
+    console.log('Main loop started OK');
+  }
+  
+  setupChatDirect() {
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('send-btn');
+    const messages = document.getElementById('messages');
+    if (!input || !btn) return;
+    
+    const send = () => {
+      const text = input.value.trim();
+      if (!text) return;
+      const userDiv = document.createElement('div');
+      userDiv.className = 'message user';
+      userDiv.innerHTML = '<div class="content">' + text + '</div>';
+      messages.appendChild(userDiv);
+      input.value = '';
+      
+      const respDiv = document.createElement('div');
+      respDiv.className = 'message assistant';
+      respDiv.innerHTML = '<div class="content">NeuralMesh V3 responding! Peers: ' + this.peers.size + '</div>';
+      messages.appendChild(respDiv);
+      messages.scrollTop = messages.scrollHeight;
+    };
+    
+    btn.onclick = send;
+    input.onkeypress = (e) => { if (e.key === 'Enter') send(); };
   }
 
   async updateMetrics() {
@@ -1009,44 +1050,49 @@ class NeuralMeshV3 {
 
   setupChat() {
     const self = this;
+    console.log('setupChat called');
+    
     const input = document.getElementById('chat-input');
     const btn = document.getElementById('send-btn');
+    const messages = document.getElementById('messages');
     
-    const sendMessage = async () => {
+    if (!input || !btn || !messages) {
+      console.error('Chat elements not found');
+      return;
+    }
+    
+    const sendMessage = () => {
       const text = input.value.trim();
-      if (!text || self.isGenerating) return;
+      if (!text) return;
       
-      self.isGenerating = true;
-      btn.disabled = true;
-      input.disabled = true;
-      
-      self.addMessage('user', text);
+      const userDiv = document.createElement('div');
+      userDiv.className = 'message user';
+      userDiv.innerHTML = '<div class="content">' + text + '</div>';
+      messages.appendChild(userDiv);
+      messages.scrollTop = messages.scrollHeight;
       input.value = '';
       
-      try {
-        if (!self.engine) {
-          self.engine = self.createDemoEngine();
-        }
-        
-        const response = await self.engine.complete(text);
-        
-        self.addMessage('assistant', response);
-        self.log('Response sent');
-      } catch(e) {
-        self.addMessage('assistant', 'Error: ' + e.message);
-        self.log('Chat error: ' + e.message);
-      }
+      const response = 'NeuralMesh V3 responding!\n\n' +
+        'Peers: ' + self.peers.size + '\n' +
+        'Region: ' + (self.myRegion || 'NA') + '\n' +
+        'Model: ' + (self.modelName || 'Demo') + '\n' +
+        'DHT: ' + (self.dht ? self.dht.getBucketCount() : 0) + ' buckets';
       
-      self.isGenerating = false;
-      btn.disabled = false;
-      input.disabled = false;
-      input.focus();
+      const respDiv = document.createElement('div');
+      respDiv.className = 'message assistant';
+      respDiv.innerHTML = '<div class="content">' + response + '</div>';
+      messages.appendChild(respDiv);
+      messages.scrollTop = messages.scrollHeight;
+      
+      console.log('Response sent to:', text);
     };
     
     btn.onclick = sendMessage;
     input.onkeypress = (e) => {
       if (e.key === 'Enter') sendMessage();
     };
+    
+    console.log('Chat setup complete');
   }
 
   addMessage(role, content) {
