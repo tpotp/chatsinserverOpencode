@@ -207,15 +207,22 @@ class KademliaDHT {
   }
 
   xorDistance(id1, id2) {
-    const n1 = BigInt('0x' + id1);
-    const n2 = BigInt('0x' + id2);
-    return n1 ^ n2;
+    const hash1 = this.simpleHash(id1);
+    const hash2 = this.simpleHash(id2);
+    return Math.abs(hash1 - hash2);
+  }
+
+  simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return Math.abs(hash);
   }
 
   bucketIndex(id1, id2) {
-    const dist = this.xorDistance(id1, id2);
-    const bin = dist.toString(2);
-    return 255 - bin.length + 1;
+    return (this.xorDistance(id1, id2) % 256 + 256) % 256;
   }
 
   async addPeer(peerId, peerInfo) {
