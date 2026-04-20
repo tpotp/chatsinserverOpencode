@@ -687,25 +687,32 @@ class NeuralMeshV3 {
   }
 
   async init() {
-    this.updateLoading('Initializing Kademlia DHT...', 10);
-    await this.initializeDHT();
-    
-    this.updateLoading('Setting up GossipSub v2.0...', 25);
-    await this.initializeGossipSub();
-    
-    this.updateLoading('Configuring Mixture of Experts...', 40);
-    this.configureMoE();
-    
-    this.updateLoading('Initializing Federated Learning V2...', 55);
-    await this.initializeFL();
-    
-    this.updateLoading('Connecting to Nostr relays...', 70);
-    await this.connectToRelays();
-    
-    this.updateLoading('Joining P2P network...', 85);
-    await this.joinNetwork();
-    
-    this.updateLoading('Network ready!', 100);
+    try {
+      this.updateLoading('Starting...', 5);
+      
+      this.updateLoading('Initializing DHT...', 15);
+      try { await this.initializeDHT(); } catch(e) { this.log('DHT init failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Setting up GossipSub...', 30);
+      try { await this.initializeGossipSub(); } catch(e) { this.log('GossipSub failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Configuring MoE...', 45);
+      try { this.configureMoE(); } catch(e) { this.log('MoE failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Initializing FL...', 60);
+      try { await this.initializeFL(); } catch(e) { this.log('FL init failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Connecting to Nostr...', 75);
+      try { await this.connectToRelays(); } catch(e) { this.log('Relays failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Joining network...', 90);
+      try { await this.joinNetwork(); } catch(e) { this.log('Join failed: ' + e.message, 'error'); }
+      
+      this.updateLoading('Network ready!', 100);
+    } catch(e) {
+      this.log('Init critical error: ' + e.message, 'error');
+      document.getElementById('loading-text').textContent = 'Error: ' + e.message;
+    }
     
     setTimeout(() => {
       document.getElementById('loading').classList.add('hidden');
@@ -719,16 +726,21 @@ class NeuralMeshV3 {
   }
 
   async initializeDHT() {
-    const peers = this.generateSimulatedPeers(20);
-    for (const peer of peers) {
-      await this.dht.addPeer(peer.peerId, peer);
+    try {
+      const peers = this.generateSimulatedPeers(20);
+      for (const peer of peers) {
+        await this.dht.addPeer(peer.peerId, peer);
+      }
+      this.log('DHT initialized with ' + this.dht.getBucketCount() + ' buckets');
+      document.getElementById('dht-initialized').textContent = 'Yes';
+      document.getElementById('routing-size').textContent = this.dht.getBucketCount();
+      
+      const lookup = await this.dht.lookup(this.peerId);
+      document.getElementById('lookup-latency').textContent = lookup.latency.toFixed(1) + 'ms';
+    } catch(e) {
+      this.log('DHT error: ' + e.message);
+      document.getElementById('dht-initialized').textContent = 'Failed';
     }
-    this.log('DHT initialized with ' + this.dht.getBucketCount() + ' buckets');
-    document.getElementById('dht-initialized').textContent = 'Yes';
-    document.getElementById('routing-size').textContent = this.dht.getBucketCount();
-    
-    const lookup = await this.dht.lookup(this.peerId);
-    document.getElementById('lookup-latency').textContent = lookup.latency.toFixed(1) + 'ms';
   }
 
   generateSimulatedPeers(count) {
@@ -859,16 +871,18 @@ class NeuralMeshV3 {
   }
 
   startMainLoop() {
-    setInterval(() => this.updateMetrics(), 1000);
-    setInterval(() => this.broadcastPresence(), CONFIG.PRESENCE_INTERVAL);
-    setInterval(() => this.shareKVCache(), CONFIG.CACHE_SHARE_INTERVAL);
-    setInterval(() => this.runFederatedLearning(), CONFIG.FEDERATION_INTERVAL);
-    setInterval(() => this.performGossip(), 3000);
-    setInterval(() => this.measureBandwidth(), 5000);
+    const safe = (fn, name) => setInterval(() => { try { fn(); } catch(e) { console.error(name + ' error:', e); } }, 1000);
     
-    this.startVisualization();
-    this.setupChat();
-    this.log('Main loop started - all systems operational');
+    safe(() => this.updateMetrics(), 'metrics');
+    safe(() => this.broadcastPresence(), 'presence');
+    safe(() => this.shareKVCache(), 'cache');
+    safe(() => this.runFederatedLearning(), 'federation');
+    safe(() => this.performGossip(), 'gossip');
+    safe(() => this.measureBandwidth(), 'bandwidth');
+    
+    try { this.startVisualization(); } catch(e) { this.log('Viz error: ' + e.message); }
+    try { this.setupChat(); } catch(e) { this.log('Chat error: ' + e.message); }
+    this.log('Main loop started');
   }
 
   async updateMetrics() {
