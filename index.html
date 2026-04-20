@@ -735,7 +735,8 @@ class NeuralMeshV3 {
     }
     
     setTimeout(() => {
-      document.getElementById('loading').classList.add('hidden');
+      const loading = document.getElementById('loading');
+      if (loading) loading.classList.add('hidden');
       this.startMainLoop();
     }, 1500);
   }
@@ -840,13 +841,15 @@ class NeuralMeshV3 {
   }
 
   selectModelTier() {
+    const $ = (id) => document.getElementById(id);
+    if (!$('current-model')) return;
     const tier = this.shardManager.selectTier(this.peers.size, this.totalCompute);
     this.modelName = tier.name + ' (' + tier.params + 'B)';
-    document.getElementById('current-model').textContent = this.modelName;
-    document.getElementById('local-params').textContent = tier.params + 'B';
-    document.getElementById('total-params').textContent = (tier.params * this.peers.size).toFixed(1) + 'B';
-    document.getElementById('shard-count').textContent = this.shardManager.distributeShards(Array.from(this.peers.values()));
-    document.getElementById('active-experts').textContent = Math.ceil(tier.experts * 0.6);
+    $('current-model').textContent = this.modelName;
+    $('local-params').textContent = tier.params + 'B';
+    $('total-params').textContent = (tier.params * this.peers.size).toFixed(1) + 'B';
+    $('shard-count').textContent = this.shardManager.distributeShards(Array.from(this.peers.values()));
+    $('active-experts').textContent = Math.ceil(tier.experts * 0.6);
     return tier;
   }
 
@@ -891,6 +894,10 @@ class NeuralMeshV3 {
   }
 
   startMainLoop() {
+    if (!document.getElementById('uptime')) {
+      setTimeout(() => this.startMainLoop(), 500);
+      return;
+    }
     const safe = (fn, name) => setInterval(() => { try { fn(); } catch(e) { console.error(name + ' error:', e); } }, 1000);
     
     safe(() => this.updateMetrics(), 'metrics');
@@ -906,22 +913,25 @@ class NeuralMeshV3 {
   }
 
   async updateMetrics() {
+    const $ = (id) => document.getElementById(id);
+    if (!$('uptime')) return;
+    
     const uptime = Math.floor((Date.now() - this.startTime) / 1000);
-    document.getElementById('uptime').textContent = uptime + 's';
-    document.getElementById('peers-count').textContent = this.peers.size;
-    document.getElementById('dht-buckets').textContent = this.dht.getBucketCount();
-    document.getElementById('routing-size').textContent = this.dht.getBucketCount() * CONFIG.DHT_K;
-    document.getElementById('mesh-peers').textContent = this.peerConnections.size || Math.min(this.peers.size, CONFIG.MAX_DIRECT_PEERS);
+    $('uptime').textContent = uptime + 's';
+    $('peers-count').textContent = this.peers.size;
+    $('dht-buckets').textContent = this.dht.getBucketCount();
+    $('routing-size').textContent = this.dht.getBucketCount() * CONFIG.DHT_K;
+    $('mesh-peers').textContent = this.peerConnections.size || Math.min(this.peers.size, CONFIG.MAX_DIRECT_PEERS);
     
     this.totalCompute = Array.from(this.peers.values()).reduce((a, p) => a + p.computePower, 0) + this.computePower;
-    document.getElementById('compute-power').textContent = this.totalCompute.toFixed(1);
-    document.getElementById('total-compute').textContent = (this.totalCompute * 0.1).toFixed(1);
+    $('compute-power').textContent = this.totalCompute.toFixed(1);
+    $('total-compute').textContent = (this.totalCompute * 0.1).toFixed(1);
     
     const cacheSize = this.kvCache.size * 0.5;
-    document.getElementById('shared-cache').textContent = cacheSize.toFixed(1);
+    $('shared-cache').textContent = cacheSize.toFixed(1);
     
-    document.getElementById('active-nodes').textContent = this.peers.size + 1;
-    document.getElementById('experts-active').textContent = Math.ceil(this.moe.experts.size * 0.6);
+    $('active-nodes').textContent = this.peers.size + 1;
+    $('experts-active').textContent = Math.ceil(this.moe.experts.size * 0.6);
     
     this.selectModelTier();
   }
