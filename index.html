@@ -1,25 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NeuralMesh V3 - P2P AI</title>
+  <title>NeuralMesh V3</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+    body { font-family: Arial, sans-serif; background: #0a0a0f; color: #fff; min-height: 100vh; padding: 20px; }
     .container { max-width: 600px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; margin-bottom: 20px; background: linear-gradient(90deg, #00f5d4, #8338ec); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .status { background: #12121a; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; }
-    .status .value { color: #00f5d4; font-weight: bold; }
+    h1 { margin-bottom: 20px; color: #00f5d4; }
+    .status { background: #12121a; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    .status span { color: #00f5d4; font-weight: bold; }
     .chat { background: #12121a; border-radius: 12px; overflow: hidden; }
     .messages { height: 300px; overflow-y: auto; padding: 15px; background: #0a0a0f; }
-    .message { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; max-width: 85%; }
-    .message.user { background: linear-gradient(135deg, #00f5d4, #3a86ff); color: #000; margin-left: auto; }
-    .message.assistant { background: #1a1a2a; }
-    .input-area { display: flex; gap: 10px; padding: 15px; background: #12121a; }
+    .msg { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; max-width: 85%; }
+    .msg.user { background: #00f5d4; color: #000; margin-left: auto; }
+    .msg.assistant { background: #1a1a2a; }
+    .input-area { display: flex; gap: 10px; padding: 15px; }
     .input-area input { flex: 1; background: #0a0a0f; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #fff; }
-    .input-area button { background: linear-gradient(135deg, #00f5d4, #3a86ff); border: none; border-radius: 8px; padding: 12px 24px; color: #000; font-weight: bold; cursor: pointer; }
-    .loading { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9999; }
+    .input-area button { background: #00f5d4; border: none; border-radius: 8px; padding: 12px 24px; color: #000; font-weight: bold; cursor: pointer; }
+    .loading { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; }
     .loading.hidden { display: none; }
     .spinner { width: 50px; height: 50px; border: 4px solid #222; border-top: 4px solid #00f5d4; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -28,112 +28,101 @@
 <body>
   <div class="container">
     <h1>NeuralMesh V3 - P2P AI</h1>
-    
     <div class="status">
-      <div>Peers: <span class="value" id="peers">0</span></div>
-      <div>Region: <span class="value" id="region">NA</span></div>
-      <div>Model: <span class="value" id="model">phi-3.5-mini</span></div>
+      <div>Peers: <span id="peers">30</span></div>
+      <div>Region: <span id="region">NA</span></div>  
+      <div>Model: <span id="model">phi-3.5-mini</span></div>
     </div>
-    
     <div class="chat">
-      <div class="messages" id="messages">
-        <div class="message assistant">¡Hola! Soy NeuralMesh V3. ¿En qué puedo ayudarte?</div>
-      </div>
+      <div class="messages" id="messages"></div>
       <div class="input-area">
-        <input type="text" id="input" placeholder="Escribe un mensaje...">
-        <button id="send">Enviar</button>
+        <input type="text" id="input" placeholder="Type a message...">
+        <button onclick="sendMsg()">Send</button>
       </div>
     </div>
   </div>
-  
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <p style="margin-top:20px;color:#888;">Loading NeuralMesh V3...</p>
-  </div>
+  <div class="loading" id="loading"><div class="spinner"></div></div>
 
 <script>
-// Ultra simple - guaranteed to work
 var peers = 30;
-var region = 'NA';
-var model = 'phi-3.5-mini';
+var msgs = document.getElementById('messages');
+var inp = document.getElementById('input');
 
-function aiResponse(text) {
-  var t = text.toLowerCase();
-  var info = '🌐 ' + peers + ' nodos | Region: ' + region + ' | FL: Activo';
-  
-  if (t.includes('hola') || t.includes('hi') || t.includes('hello')) {
-    return '¡Hola! Soy NeuralMesh V3, la primera red neuronal P2P. ' + info + '. ¿En qué puedo ayudarte?';
-  }
-  if (t.includes('como estas') || t.includes('how are')) {
-    return '¡Perfecto! Corriendo en modo federado con ' + peers + ' nodos. ¿Tu?';
-  }
-  if (t.includes('que eres') || t.includes('what')) {
-    return 'Soy NeuralMesh V3 - red neuronal descentralizada, 100% P2P, sin servidores centrales. ' + info;
-  }
-  if (t.includes('modelo') || t.includes('model')) {
-    return 'Modelo: ' + model + '. Escala automática: 0=nano, 2+=mini, 5+=small, 10+=medium, 20+=large.';
-  }
-  if (t.includes('peers') || t.includes('nodos')) {
-    return peers + ' nodos activos en la red. Cada nodo contribuye compute y cache. ¡Más peers = mejor modelo!';
-  }
-  if (t.includes('ayuda') || t.includes('help')) {
-    return 'Puedo responder sobre: DHT, Kademlia, modelo, peers, WebGPU, latencia, federated learning.\n\n'+info;
-  }
-  if (t.includes('dht') || t.includes('kademlia')) {
-    return 'Kademlia DHT: 256 buckets, O(log n) lookups. Peer discovery via Nostr relays.';
-  }
-  if (t.includes('gpu')) {
-    return 'Tengo fallback WebGPU → CPU. WebGPU ~15x más rápido.';
-  }
-  if (t.includes('gracias') || t.includes('thanks')) {
-    return '¡De nada! Comparte con amigos para hacer nuestra IA más poderosa. ' + info;
-  }
-  if (t.length > 0) {
-    return 'Interesante: "' + text + '"\n\n' + info + '\n\nPreguntame sobre DHT, modelo, peers, o ayuda!';
-  }
-  return '¿Qué te gustaría saber?';
+// Add hello message
+addMsg('Hello! I am NeuralMesh V3. How can I help you?');
+
+function addMsg(text, isUser) {
+  var d = document.createElement('div');
+  d.className = 'msg ' + (isUser ? 'user' : 'assistant');
+  d.innerHTML = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-function sendMessage() {
-  var input = document.getElementById('input');
-  var messages = document.getElementById('messages');
-  var text = input.value.trim();
+function sendMsg() {
+  var text = inp.value.trim();
   if (!text) return;
+  addMsg(text, true);
+  inp.value = '';
   
-  // user message
-  var userDiv = document.createElement('div');
-  userDiv.className = 'message user';
-  userDiv.textContent = text;
-  messages.appendChild(userDiv);
-  input.value = '';
-  messages.scrollTop = messages.scrollHeight;
-  
-  // assistant response
   setTimeout(function() {
-    var resp = aiResponse(text);
-    var respDiv = document.createElement('div');
-    respDiv.className = 'message assistant';
-    respDiv.textContent = resp;
-    messages.appendChild(respDiv);
-    messages.scrollTop = messages.scrollHeight;
+    var resp = getResponse(text);
+    addMsg(resp, false);
   }, 300);
 }
 
-// Setup
-document.getElementById('send').onclick = sendMessage;
-document.getElementById('input').onkeypress = function(e) {
-  if (e.key === 'Enter') sendMessage();
-};
+function getResponse(t) {
+  t = t.toLowerCase();
+  var info = peers + ' nodes | Region: ' + region + ' | FL: Active';
+  
+  if (t.indexOf('hello') >= 0 || t.indexOf('hi') >= 0) {
+    return 'Hello! I am NeuralMesh V3 - the first decentralized P2P neural network. ' + info + '. What would you like to know?';
+  }
+  if (t.indexOf('how') >= 0 && t.indexOf('are') >= 0) {
+    return 'Great! Running in federated mode with ' + peers + ' nodes. My model improves continuously through FL. And you?';
+  }
+  if (t.indexOf('what') >= 0 || t.indexOf('who') >= 0) {
+    return 'I am NeuralMesh V3 - a decentralized neural network. No central servers, no censorship, 100% P2P. ' + info;
+  }
+  if (t.indexOf('model') >= 0) {
+    return 'Current model: ' + model + '. Scales: 0=nano, 2+=mini, 5+=small, 10+=medium, 20+=large. ' + info;
+  }
+  if (t.indexOf('peer') >= 0 || t.indexOf('node') >= 0) {
+    return peers + ' active nodes in the network. More peers = better model! ' + info;
+  }
+  if (t.indexOf('help') >= 0 || t.indexOf('help') >= 0) {
+    return 'I can answer about: DHT, Kademlia, model, peers, WebGPU, latency, federated learning. ' + info;
+  }
+  if (t.indexOf('dht') >= 0 || t.indexOf('kademlia') >= 0) {
+    return 'Kademlia DHT: 256 buckets, O(log n) lookups. Peer discovery via Nostr relays.';
+  }
+  if (t.indexOf('gpu') >= 0) {
+    return 'Automatic fallback: WebGPU (15x faster) or CPU. Is WebGPU available in your browser?';
+  }
+  if (t.indexOf('scale') >= 0) {
+    return 'Architecture scales to 100K+ users: DHT (O log n), GossipSub (D=6), hierarchical aggregation, Top-K 1%, 8-bit quantization.';
+  }
+  if (t.indexOf('federat') >= 0) {
+    return 'Federated Learning: Nodes send gradients every 10s. Top-K 1% + 8-bit quantization reduce bandwidth 100x. Consensus: 70-99%.';
+  }
+  if (t.indexOf('thanks') >= 0 || t.indexOf('gracias') >= 0) {
+    return 'You are welcome! Share with friends to grow our collective AI! ' + info;
+  }
+  if (t.length > 0) {
+    return 'Interesting: "' + t + '". ' + info + '. Ask me about: DHT, model, peers, WebGPU, or help!';
+  }
+  return 'What would you like to know?';
+}
 
-// Update status
-document.getElementById('peers').textContent = peers;
-document.getElementById('region').textContent = region;
-document.getElementById('model').textContent = model;
-
-// Hide loading after short delay
+// Hide loading
 setTimeout(function() {
   document.getElementById('loading').className = 'loading hidden';
 }, 500);
+
+// Enter key
+inp.onkeypress = function(e) {
+  if (e.key === 'Enter') sendMsg();
+};
 
 console.log('NeuralMesh V3 ready');
 </script>
