@@ -655,8 +655,8 @@ class NeuralMeshV3 {
     this.shardManager = new ModelShardManager();
     
     this.myRegion = this.hierarchical.detectRegion();
-    this.computePower = this.estimateComputePower();
-    this.totalCompute = this.computePower;
+    this.hardwareInfo = { hardware: 'CPU', compute: 1 };
+    this.totalCompute = this.hardwareInfo.compute;
     
     this.init();
   }
@@ -668,10 +668,28 @@ class NeuralMeshV3 {
   }
 
   estimateComputePower() {
-    const gpu = navigator.gpu ? 15 : 0;
+    return 0;
+  }
+  
+  async detectHardware() {
+    let hw = 'CPU';
+    let compute = 1;
+    try {
+      if (navigator.gpu) {
+        const gpu = navigator.gpu.requestAdapter();
+        if (gpu) {
+          const adapter = await gpu;
+          if (adapter) {
+            hw = 'WebGPU';
+            compute = 15;
+          }
+        }
+      }
+    } catch(e) {}
     const cores = navigator.hardwareConcurrency || 4;
     const memory = navigator.deviceMemory || 4;
-    return gpu + (cores * 0.5) + (memory * 0.3);
+    compute += cores * 0.5 + memory * 0.3;
+    return { hardware: hw, compute };
   }
 
   log(msg, type = 'info') {
@@ -689,6 +707,8 @@ class NeuralMeshV3 {
   async init() {
     try {
       this.updateLoading('Starting...', 5);
+      
+      try { const hw = await this.detectHardware(); this.hardwareInfo = hw; this.log('Hardware: ' + hw.hardware); } catch(e) {}
       
       this.updateLoading('Initializing DHT...', 15);
       try { await this.initializeDHT(); } catch(e) { this.log('DHT init failed: ' + e.message, 'error'); }
@@ -957,88 +977,66 @@ class NeuralMeshV3 {
   }
 
   createDemoEngine() {
-    const responses = [
-      "🧠 Processing through distributed neural network...",
-      "⚡ Routing through " + this.moe.experts.size + " specialized experts...",
-      "🌐 Coordinating with " + this.peers.size + " peer nodes globally...",
-      "🔄 Federated consensus at " + (this.fl.accuracy * 100).toFixed(1) + "% accuracy..."
-    ];
-    
-    const details = [
-      "📊 DHT Buckets: " + this.dht.getBucketCount(),
-      "🌍 Region: " + CONFIG.REGIONS[this.myRegion]?.name,
-      "⚙️ Model: " + this.modelName,
-      "🧩 Active Experts: " + Math.ceil(this.moe.experts.size * 0.6),
-      "📈 Compression: " + (this.fl.compressionRatio || 1).toFixed(1) + "x"
-    ];
-    
+    const self = this;
     return {
       model: this.modelName,
-      chat: {
-        completions: {
-          create: async (opts) => {
-            const intro = responses[Math.floor(Math.random() * responses.length)];
-            const detail = details[Math.floor(Math.random() * details.length)];
-            const text = intro + "\n\n" + detail;
-            
-            return (async function*() {
-              for (let i = 0; i < text.length; i++) {
-                await new Promise(r => setTimeout(r, 5 + Math.random() * 10));
-                yield { choices: [{ delta: { content: text[i] } }] };
-              }
-            })();
-          }
-        }
+      async complete(prompt) {
+        const expert = self.moe.routeQuery(prompt);
+        const responses = [
+          "🧠 Analyzing your query through the distributed neural mesh...",
+          "⚡ Processing with " + self.moe.experts.size + " specialized experts...",
+          "🌐 Coordinating " + self.peers.size + " peer nodes...",
+          "🔄 NeuralMesh consensus: " + (self.fl.accuracy * 100).toFixed(1) + "%"
+        ];
+        return responses[Math.floor(Math.random() * responses.length)] + 
+          "\n\n📊 Network: " + self.peers.size + " peers | " +
+          "Region: " + (CONFIG.REGIONS[self.myRegion]?.name || self.myRegion) + " | " +
+          "Model: " + self.modelName + " | " +
+          "Experts: " + Math.ceil(self.moe.experts.size * 0.6);
       }
     };
   }
 
   setupChat() {
+    const self = this;
     const input = document.getElementById('chat-input');
     const btn = document.getElementById('send-btn');
     
     const sendMessage = async () => {
       const text = input.value.trim();
-      if (!text || this.isGenerating) return;
+      if (!text || self.isGenerating) return;
       
-      this.isGenerating = true;
+      self.isGenerating = true;
       btn.disabled = true;
       input.disabled = true;
       
-      this.addMessage('user', text);
-      this.addMessage('system', '🌐 Broadcasting to network...');
+      self.addMessage('user', text);
       input.value = '';
       
-      const expert = await this.moe.routeQuery(text, Array.from(this.moe.experts.keys()));
-      this.log('Query routed to expert: ' + expert.name);
-      
-      this.engine = this.engine || this.createDemoEngine();
-      
-      const stream = await this.engine.chat.completions.create({
-        model: this.modelName,
-        messages: [{ role: 'user', content: text }],
-        stream: true
-      });
-      
-      this.removeMessage('system');
-      const assistantMsg = this.addMessage('assistant', '');
-      const contentDiv = assistantMsg.querySelector('.content');
-      
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        contentDiv.textContent += content;
+      try {
+        if (!self.engine) {
+          self.engine = self.createDemoEngine();
+        }
+        
+        const response = await self.engine.complete(text);
+        
+        self.addMessage('assistant', response);
+        self.log('Response sent');
+      } catch(e) {
+        self.addMessage('assistant', 'Error: ' + e.message);
+        self.log('Chat error: ' + e.message);
       }
       
-      this.isGenerating = false;
+      self.isGenerating = false;
       btn.disabled = false;
       input.disabled = false;
       input.focus();
     };
     
-    btn.addEventListener('click', sendMessage);
-    input.addEventListener('keypress', (e) => {
+    btn.onclick = sendMessage;
+    input.onkeypress = (e) => {
       if (e.key === 'Enter') sendMessage();
-    });
+    };
   }
 
   addMessage(role, content) {
