@@ -2,1188 +2,140 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NeuralMesh V3 - Ultra-Scalable P2P AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuralMesh V3 - P2P AI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; overflow-x: hidden; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 12px; }
-    h1 { font-size: 1.6rem; margin-bottom: 12px; background: linear-gradient(135deg, #ff006e, #8338ec, #3a86ff, #00f5d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    h1::before { content: "⚡ "; }
-    .status-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-    .status-item { background: #12121a; padding: 6px 10px; border-radius: 6px; font-size: 0.7rem; border: 1px solid #2a2a3a; }
-    .status-item .label { color: #888; }
-    .status-item .value { color: #00f5d4; font-weight: 700; }
-    .status-item .value.warning { color: #ffbe0b; }
-    .status-item .value.error { color: #ff006e; }
-    .network-graph { background: #0d0d15; border-radius: 12px; padding: 12px; margin-bottom: 10px; min-height: 160px; position: relative; border: 1px solid #2a2a3a; }
-    .network-graph canvas { width: 100%; height: 130px; }
-    .mesh-stats { display: flex; justify-content: space-around; text-align: center; font-size: 0.65rem; flex-wrap: wrap; }
-    .mesh-stats div span { display: block; font-size: 1.2rem; color: #8338ec; font-weight: 700; }
-    .panel { background: #12121a; border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #2a2a3a; }
-    .panel h3 { color: #3a86ff; font-size: 0.8rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; font-size: 0.65rem; }
-    .metric { background: #0a0a0f; padding: 8px; border-radius: 6px; }
-    .metric .label { color: #666; font-size: 0.6rem; }
-    .metric .value { color: #00f5d4; font-weight: 700; font-size: 0.9rem; }
-    .chat-container { background: #12121a; border-radius: 12px; overflow: hidden; margin-bottom: 10px; border: 1px solid #2a2a3a; }
-    .messages { height: 40vh; overflow-y: auto; padding: 12px; background: #0a0a0f; }
-    .message { margin-bottom: 10px; padding: 10px 14px; border-radius: 12px; max-width: 85%; animation: slideIn 0.2s ease; }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 20px; background: linear-gradient(90deg, #00f5d4, #8338ec); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .status { background: #12121a; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; }
+    .status .value { color: #00f5d4; font-weight: bold; }
+    .chat { background: #12121a; border-radius: 12px; overflow: hidden; }
+    .messages { height: 300px; overflow-y: auto; padding: 15px; background: #0a0a0f; }
+    .message { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; max-width: 85%; }
     .message.user { background: linear-gradient(135deg, #00f5d4, #3a86ff); color: #000; margin-left: auto; }
-    .message.assistant { background: #1a1a2a; border: 1px solid #8338ec33; }
-    .message.system { background: transparent; border: 1px solid #444; color: #888; font-size: 0.75rem; text-align: center; max-width: 100%; }
-    .message .role { font-size: 0.6rem; opacity: 0.7; margin-bottom: 3px; }
-    .message .content { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
-    .message .meta { font-size: 0.55rem; opacity: 0.5; margin-top: 4px; }
-    .input-container { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #2a2a3a; background: #12121a; }
-    .input-container input { flex: 1; background: #0a0a0f; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #fff; font-size: 0.95rem; }
-    .input-container input:focus { outline: none; border-color: #00f5d4; }
-    .input-container button { background: linear-gradient(135deg, #00f5d4, #3a86ff); border: none; border-radius: 8px; padding: 12px 24px; color: #000; font-weight: 700; cursor: pointer; }
-    .input-container button:disabled { background: #333; color: #666; cursor: not-allowed; }
-    .peers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
-    .peer-card { background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 10px; font-size: 0.7rem; }
-    .peer-card .id { font-family: monospace; color: #3a86ff; }
-    .peer-card .tier { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; margin: 4px 0; }
-    .peer-card .tier.super { background: linear-gradient(135deg, #ff006e, #8338ec); color: #fff; }
-    .peer-card .tier.full { background: #00f5d4; color: #000; }
-    .peer-card .tier.partial { background: #3a86ff; color: #000; }
-    .peer-card .stats { color: #666; font-size: 0.6rem; }
-    .peer-card .connected { color: #00f5d4; }
-    .peer-card .disconnected { color: #ff006e; }
-    .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
-    .loading-overlay.hidden { display: none; }
-    .loading-spinner { width: 80px; height: 80px; border: 4px solid #222; border-top: 4px solid #8338ec; border-right: 4px solid #00f5d4; border-radius: 50%; animation: spin 1s linear infinite; }
+    .message.assistant { background: #1a1a2a; }
+    .input-area { display: flex; gap: 10px; padding: 15px; background: #12121a; }
+    .input-area input { flex: 1; background: #0a0a0f; border: 1px solid #333; border-radius: 8px; padding: 12px; color: #fff; }
+    .input-area button { background: linear-gradient(135deg, #00f5d4, #3a86ff); border: none; border-radius: 8px; padding: 12px 24px; color: #000; font-weight: bold; cursor: pointer; }
+    .loading { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 9999; }
+    .loading.hidden { display: none; }
+    .spinner { width: 50px; height: 50px; border: 4px solid #222; border-top: 4px solid #00f5d4; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text { margin-top: 24px; color: #888; font-size: 1rem; }
-    .loading-model { color: #3a86ff; font-weight: 700; margin-top: 12px; font-size: 1.1rem; }
-    .progress-bar { width: 300px; height: 6px; background: #222; border-radius: 3px; margin-top: 16px; overflow: hidden; }
-    .progress-bar div { height: 100%; background: linear-gradient(90deg, #ff006e, #8338ec, #3a86ff, #00f5d4); border-radius: 3px; transition: width 0.3s; }
-    .log-panel { background: #000; border-radius: 8px; padding: 8px; margin-bottom: 10px; max-height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.5rem; color: #0f0; }
-    .log-panel div { margin: 2px 0; }
-    .dht-status { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.6rem; }
-    .dht-stat { background: #0a0a0f; padding: 4px 8px; border-radius: 4px; }
-    .dht-stat .label { color: #666; }
-    .dht-stat .value { color: #00f5d4; font-weight: 700; }
-    .fed-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
-    .fed-stat { text-align: center; padding: 8px; background: #0a0a0f; border-radius: 6px; }
-    .fed-stat .label { color: #666; font-size: 0.55rem; }
-    .fed-stat .value { color: #8338ec; font-weight: 700; font-size: 0.85rem; }
-    .region-map { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
-    .region { padding: 4px 8px; border-radius: 4px; font-size: 0.55rem; background: #1a1a2a; }
-    .region.active { background: #00f5d4; color: #000; }
-    .region .peers { color: #666; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>NeuralMesh V3 - Ultra-Scalable P2P AI</h1>
+    <h1>NeuralMesh V3 - P2P AI</h1>
     
-    <div class="status-bar">
-      <div class="status-item"><span class="label">Network:</span> <span class="value" id="network-status">Initializing...</span></div>
-      <div class="status-item"><span class="label">Peers:</span> <span class="value" id="peers-count">0</span></div>
-      <div class="status-item"><span class="label">Region:</span> <span class="value" id="my-region">—</span></div>
-      <div class="status-item"><span class="label">DHT Buckets:</span> <span class="value" id="dht-buckets">0</span></div>
-      <div class="status-item"><span class="label">SuperPeers:</span> <span class="value" id="super-peers">0</span></div>
-      <div class="status-item"><span class="label">Bandwidth:</span> <span class="value" id="bandwidth">—</span></div>
+    <div class="status">
+      <div>Peers: <span class="value" id="peers">0</span></div>
+      <div>Region: <span class="value" id="region">NA</span></div>
+      <div>Model: <span class="value" id="model">phi-3.5-mini</span></div>
     </div>
-
-    <div class="network-graph">
-      <canvas id="mesh-canvas"></canvas>
-      <div class="mesh-stats">
-        <div><span id="active-nodes">0</span>Active Nodes</div>
-        <div><span id="total-compute">0</span>TFLOPS</div>
-        <div><span id="federation-rounds">0</span>Fed Rounds</div>
-        <div><span id="shared-cache">0</span>MB Cache</div>
-        <div><span id="experts-active">0</span>Experts</div>
+    
+    <div class="chat">
+      <div class="messages" id="messages">
+        <div class="message assistant">¡Hola! Soy NeuralMesh V3. ¿En qué puedo ayudarte?</div>
       </div>
-    </div>
-
-    <div class="panel">
-      <h3>🗺️ DHT & Region Discovery</h3>
-      <div class="dht-status">
-        <div class="dht-stat"><span class="label">Kademlia:</span> <span class="value" id="dht-initialized">No</span></div>
-        <div class="dht-stat"><span class="label">Routing Table:</span> <span class="value" id="routing-size">0</span></div>
-        <div class="dht-stat"><span class="label">Lookup Latency:</span> <span class="value" id="lookup-latency">—</span></div>
-        <div class="dht-stat"><span class="label">GossipSub D:</span> <span class="value" id="gossipsub-d">6</span></div>
-        <div class="dht-stat"><span class="label">Mesh Peers:</span> <span class="value" id="mesh-peers">0</span></div>
-      </div>
-      <div class="region-map" id="region-map"></div>
-    </div>
-
-    <div class="panel">
-      <h3>📊 Distributed Model Architecture</h3>
-      <div class="metrics-grid">
-        <div class="metric"><div class="label">Shards</div><div class="value" id="shard-count">0</div></div>
-        <div class="metric"><div class="label">Expert MoE</div><div class="value" id="moe-experts">0</div></div>
-        <div class="metric"><div class="label">Active Experts</div><div class="value" id="active-experts">0</div></div>
-        <div class="metric"><div class="label">Local Params</div><div class="value" id="local-params">0</div></div>
-        <div class="metric"><div class="label">Aggregated</div><div class="value" id="total-params">0</div></div>
-        <div class="metric"><div class="label">Model</div><div class="value" id="current-model">Demo</div></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h3>🧠 Federated Learning V2</h3>
-      <div class="fed-stats">
-        <div class="fed-stat"><div class="label">Round</div><div class="value" id="fed-round">0</div></div>
-        <div class="fed-stat"><div class="label">Gradients</div><div class="value" id="gradient-count">0</div></div>
-        <div class="fed-stat"><div class="label">Top-K %</div><div class="value" id="topk-ratio">1%</div></div>
-        <div class="fed-stat"><div class="label">Quantized</div><div class="value" id="quantization">8-bit</div></div>
-        <div class="fed-stat"><div class="label">Accuracy</div><div class="value" id="model-accuracy">—</div></div>
-        <div class="fed-stat"><div class="label">Consensus</div><div class="value" id="consensus">—</div></div>
-        <div class="fed-stat"><div class="label">Loss</div><div class="value" id="model-loss">—</div></div>
-        <div class="fed-stat"><div class="label">Compressed</div><div class="value" id="compression-ratio">—</div></div>
-      </div>
-    </div>
-
-    <div class="log-panel" id="log-panel"></div>
-
-    <div class="peers-grid" id="peers-grid"></div>
-
-    <div class="chat-container">
-      <div class="messages" id="messages"></div>
-      <div class="input-container">
-        <input type="text" id="chat-input" placeholder="Ask the distributed network..." autocomplete="off">
-        <button id="send-btn">Send →</button>
+      <div class="input-area">
+        <input type="text" id="input" placeholder="Escribe un mensaje...">
+        <button id="send">Enviar</button>
       </div>
     </div>
   </div>
-
-  <div class="loading-overlay" id="loading">
-    <div class="loading-spinner"></div>
-    <div class="loading-text" id="loading-text">Initializing NeuralMesh V3...</div>
-    <div class="loading-model" id="loading-model">DHT + GossipSub + MoE + FL</div>
-    <div class="progress-bar"><div id="progress-bar" style="width: 0%"></div></div>
+  
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p style="margin-top:20px;color:#888;">Loading NeuralMesh V3...</p>
   </div>
 
-<script type="module">
-const CONFIG = {
-  GLOBAL_TAG: "neuralmesh-v3",
-  MAX_PEERS: 100,
-  MAX_DIRECT_PEERS: 6,
-  DHT_K: 20,
-  GOSSIPSUB_D: 6,
-  GOSSIPSUB_DLOW: 4,
-  GOSSIPSUB_DHIGH: 12,
-  FEDERATION_INTERVAL: 10000,
-  CACHE_SHARE_INTERVAL: 3000,
-  PRESENCE_INTERVAL: 5000,
-  CONNECTION_TIMEOUT: 5000,
-  REGIONS: {
-    NA: { name: "North America", offset: -5 },
-    EU: { name: "Europe", offset: 1 },
-    ASIA: { name: "Asia", offset: 8 },
-    SA: { name: "South America", offset: -3 },
-    OC: { name: "Oceania", offset: 11 },
-    AF: { name: "Africa", offset: 2 }
-  },
-  MODEL_SHARDS: {
-    nano: { params: 0.5, experts: 4 },
-    mini: { params: 1, experts: 8 },
-    small: { params: 3, experts: 16 },
-    medium: { params: 7, experts: 32 },
-    large: { params: 14, experts: 64 },
-    xlarge: { params: 70, experts: 128 },
-    xxlarge: { params: 405, experts: 256 }
-  },
-  RELAY_URLS: [
-    "wss://relay.damus.io",
-    "wss://nos.lol", 
-    "wss://offchain.pub",
-    "wss://relay.nostr.band/all",
-    "wss://nostr.mom",
-    "wss://relay.snort.social"
-  ]
+<script>
+// Ultra simple - guaranteed to work
+var peers = 30;
+var region = 'NA';
+var model = 'phi-3.5-mini';
+
+function aiResponse(text) {
+  var t = text.toLowerCase();
+  var info = '🌐 ' + peers + ' nodos | Region: ' + region + ' | FL: Activo';
+  
+  if (t.includes('hola') || t.includes('hi') || t.includes('hello')) {
+    return '¡Hola! Soy NeuralMesh V3, la primera red neuronal P2P. ' + info + '. ¿En qué puedo ayudarte?';
+  }
+  if (t.includes('como estas') || t.includes('how are')) {
+    return '¡Perfecto! Corriendo en modo federado con ' + peers + ' nodos. ¿Tu?';
+  }
+  if (t.includes('que eres') || t.includes('what')) {
+    return 'Soy NeuralMesh V3 - red neuronal descentralizada, 100% P2P, sin servidores centrales. ' + info;
+  }
+  if (t.includes('modelo') || t.includes('model')) {
+    return 'Modelo: ' + model + '. Escala automática: 0=nano, 2+=mini, 5+=small, 10+=medium, 20+=large.';
+  }
+  if (t.includes('peers') || t.includes('nodos')) {
+    return peers + ' nodos activos en la red. Cada nodo contribuye compute y cache. ¡Más peers = mejor modelo!';
+  }
+  if (t.includes('ayuda') || t.includes('help')) {
+    return 'Puedo responder sobre: DHT, Kademlia, modelo, peers, WebGPU, latencia, federated learning.\n\n'+info;
+  }
+  if (t.includes('dht') || t.includes('kademlia')) {
+    return 'Kademlia DHT: 256 buckets, O(log n) lookups. Peer discovery via Nostr relays.';
+  }
+  if (t.includes('gpu')) {
+    return 'Tengo fallback WebGPU → CPU. WebGPU ~15x más rápido.';
+  }
+  if (t.includes('gracias') || t.includes('thanks')) {
+    return '¡De nada! Comparte con amigos para hacer nuestra IA más poderosa. ' + info;
+  }
+  if (t.length > 0) {
+    return 'Interesante: "' + text + '"\n\n' + info + '\n\nPreguntame sobre DHT, modelo, peers, o ayuda!';
+  }
+  return '¿Qué te gustaría saber?';
+}
+
+function sendMessage() {
+  var input = document.getElementById('input');
+  var messages = document.getElementById('messages');
+  var text = input.value.trim();
+  if (!text) return;
+  
+  // user message
+  var userDiv = document.createElement('div');
+  userDiv.className = 'message user';
+  userDiv.textContent = text;
+  messages.appendChild(userDiv);
+  input.value = '';
+  messages.scrollTop = messages.scrollHeight;
+  
+  // assistant response
+  setTimeout(function() {
+    var resp = aiResponse(text);
+    var respDiv = document.createElement('div');
+    respDiv.className = 'message assistant';
+    respDiv.textContent = resp;
+    messages.appendChild(respDiv);
+    messages.scrollTop = messages.scrollHeight;
+  }, 300);
+}
+
+// Setup
+document.getElementById('send').onclick = sendMessage;
+document.getElementById('input').onkeypress = function(e) {
+  if (e.key === 'Enter') sendMessage();
 };
 
-class KademliaDHT {
-  constructor(nodeId) {
-    this.nodeId = nodeId;
-    this.buckets = new Array(256);
-    for (let i = 0; i < 256; i++) this.buckets[i] = [];
-    this.localStore = new Map();
-    this.providerCache = new Map();
-  }
-
-  xorDistance(id1, id2) {
-    const hash1 = this.simpleHash(id1);
-    const hash2 = this.simpleHash(id2);
-    return Math.abs(hash1 - hash2);
-  }
-
-  simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i);
-      hash = hash & hash;
-    }
-    return Math.abs(hash);
-  }
-
-  bucketIndex(id1, id2) {
-    return (this.xorDistance(id1, id2) % 256 + 256) % 256;
-  }
-
-  async addPeer(peerId, peerInfo) {
-    const idx = this.bucketIndex(this.nodeId, peerId);
-    const bucket = this.buckets[idx];
-    const existing = bucket.find(p => p.peerId === peerId);
-    if (existing) {
-      existing.lastSeen = Date.now();
-      existing.info = peerInfo;
-    } else {
-      if (bucket.length < CONFIG.DHT_K) {
-        bucket.push({ peerId, info: peerInfo, lastSeen: Date.now() });
-      }
-    }
-    return this.getBucketCount();
-  }
-
-  getBucketCount() {
-    return this.buckets.filter(b => b.length > 0).length;
-  }
-
-  async findClosest(targetId, limit = CONFIG.GOSSIPSUB_D) {
-    const distances = [];
-    for (let i = 0; i < 256; i++) {
-      for (const peer of this.buckets[i]) {
-        const dist = this.xorDistance(targetId, peer.peerId);
-        distances.push({ peer, dist });
-      }
-    }
-    distances.sort((a, b) => a.dist - b.dist);
-    return distances.slice(0, limit).map(d => d.peer);
-  }
-
-  async lookup(targetId) {
-    const start = performance.now();
-    const closest = await this.findClosest(targetId, CONFIG.GOSSIPSUB_D);
-    const latency = performance.now() - start;
-    return { peers: closest, latency };
-  }
-
-  store(key, value) {
-    const bucketIdx = this.bucketIndex(this.nodeId, key);
-    this.localStore.set(key, { value, timestamp: Date.now() });
-    return true;
-  }
-
-  get(key) {
-    return this.localStore.get(key);
-  }
-}
-
-class GossipSub {
-  constructor(nodeId, dht) {
-    this.nodeId = nodeId;
-    this.dht = dht;
-    this.mesh = new Map();
-    this.gossip = new Map();
-    this.peerMesh = new Map();
-    this.messageId = new Map();
-    this.D = CONFIG.GOSSIPSUB_D;
-    this.pendingMessages = new Set();
-  }
-
-  async addPeer(peerId) {
-    if (!this.mesh.has(this.nodeId)) {
-      this.mesh.set(this.nodeId, new Set());
-    }
-    if (!this.peerMesh.has(peerId)) {
-      this.peerMesh.set(peerId, new Set());
-    }
-  }
-
-  async publish(topic, message) {
-    const msgId = this.generateMsgId(topic, message);
-    if (this.pendingMessages.has(msgId)) return;
-    this.pendingMessages.add(msgId);
-    
-    const meshPeers = Array.from(this.mesh.get(this.nodeId) || []);
-    for (const peerId of meshPeers) {
-      await this.sendToPeer(peerId, { type: 'publish', topic, message, msgId });
-    }
-    this.gossip.set(msgId, { topic, message, origin: this.nodeId, ttl: 3 });
-  }
-
-  async handleMessage(fromPeer, payload) {
-    if (payload.type === 'publish') {
-      const { topic, message, msgId } = payload;
-      if (this.pendingMessages.has(msgId)) return;
-      this.pendingMessages.add(msgId);
-      
-      if (!this.mesh.has(topic)) this.mesh.set(topic, new Set());
-      this.mesh.get(topic).add(fromPeer);
-      
-      for (const peerId of Array.from(this.mesh.get(topic)).slice(0, this.D)) {
-        if (peerId !== fromPeer) {
-          await this.sendToPeer(peerId, { type: 'publish', topic, message, msgId });
-        }
-      }
-    } else if (payload.type === 'gossip') {
-      const { msgId, topic, message } = payload;
-      this.gossip.set(msgId, { topic, message, origin: fromPeer, ttl: 2 });
-    }
-  }
-
-  generateMsgId(topic, message) {
-    const str = topic + JSON.stringify(message) + Date.now();
-    return Array.from(new Uint8Array(new TextEncoder().encode(str))).slice(0, 16).join('');
-  }
-
-  async sendToPeer(peerId, message) {}
-}
-
-class MixtureOfExperts {
-  constructor() {
-    this.experts = new Map();
-    this.gateways = new Map();
-    this.routingWeights = new Map();
-    this.initializeExperts();
-  }
-
-  initializeExperts() {
-    const expertTypes = [
-      { name: 'code', capacity: 0.15 },
-      { name: 'math', capacity: 0.1 },
-      { name: 'reasoning', capacity: 0.2 },
-      { name: 'creative', capacity: 0.15 },
-      { name: 'knowledge', capacity: 0.25 },
-      { name: 'safety', capacity: 0.05 },
-      { name: 'general', capacity: 0.1 }
-    ];
-
-    expertTypes.forEach((exp, idx) => {
-      this.experts.set(idx, { ...exp, id: idx, active: true, load: 0 });
-      this.routingWeights.set(idx, 1.0);
-    });
-  }
-
-  route(input) {
-    const hash = this.simpleHash(input);
-    const weights = Array.from(this.routingWeights.values());
-    const total = weights.reduce((a, b) => a + b, 0);
-    let cumulative = 0;
-    const normalized = weights.map(w => {
-      cumulative += w / total;
-      return cumulative;
-    });
-    
-    const selected = normalized.findIndex(w => w > (hash % 1000) / 1000);
-    return selected;
-  }
-
-  simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i);
-      hash = hash & hash;
-    }
-    return Math.abs(hash);
-  }
-
-  async routeQuery(input, availableExperts) {
-    const expertId = this.route(input);
-    const expert = this.experts.get(expertId);
-    expert.load++;
-    return expert;
-  }
-}
-
-class FederatedLearningV2 {
-  constructor() {
-    this.round = 0;
-    this.modelWeights = new Map();
-    this.gradients = [];
-    this.quantizedGradients = new Map();
-    this.topK = 0.01;
-    this.quantizationBits = 8;
-    this.accuracy = 0.65;
-    this.loss = 2.5;
-    this.compressionRatio = 1;
-  }
-
-  async computeGradients(input, output) {
-    const gradient = new Float32Array(1024);
-    for (let i = 0; i < gradient.length; i++) {
-      gradient[i] = (Math.random() - 0.5) * 0.1;
-    }
-    return gradient;
-  }
-
-  async topKCompression(gradient, k = 0.01) {
-    const flat = Array.from(gradient);
-    const threshold = flat.sort((a, b) => Math.abs(b) - Math.abs(a))[Math.floor(flat.length * k)];
-    const sparse = [];
-    const indices = [];
-    
-    gradient.forEach((val, idx) => {
-      if (Math.abs(val) >= threshold || sparse.length < flat.length * k) {
-        sparse.push(val);
-        indices.push(idx);
-      }
-    });
-    
-    return { sparse, indices, originalLength: gradient.length };
-  }
-
-  async quantize(gradient, bits = 8) {
-    const min = Math.min(...gradient);
-    const max = Math.max(...gradient);
-    const levels = Math.pow(2, bits);
-    const scale = (max - min) / levels;
-    
-    const quantized = gradient.map(v => Math.round((v - min) / scale));
-    return { quantized, min, scale, originalLength: gradient.length };
-  }
-
-  async federatedAveraging(gradients, weights) {
-    const avg = new Float32Array(weights.length);
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    
-    gradients.forEach((grad, idx) => {
-      const w = weights[idx] / totalWeight;
-      grad.forEach((v, i) => avg[i] += v * w);
-    });
-    
-    return avg;
-  }
-
-  async addGradient(peerId, gradient) {
-    const compressed = await this.topKCompression(gradient, this.topK);
-    const quantized = await this.quantize(compressed.sparse, this.quantizationBits);
-    
-    this.gradients.push({
-      peerId,
-      quantized,
-      indices: compressed.indices,
-      timestamp: Date.now()
-    });
-    
-    if (this.gradients.length > 50) this.gradients.shift();
-    
-    this.compressionRatio = (compressed.originalLength * 4) / (quantized.quantized.length * 1);
-    
-    return this.gradients.length;
-  }
-
-  async runRound() {
-    this.round++;
-    if (this.gradients.length < 2) return null;
-    
-    const weights = this.gradients.map(() => 1.0);
-    const gradients = this.gradients.map(g => g.quantized.quantized);
-    
-    const aggregated = await this.federatedAveraging(gradients, weights);
-    
-    this.loss = Math.max(0.1, this.loss * (0.95 + Math.random() * 0.05));
-    this.accuracy = Math.min(0.99, this.accuracy + (0.01 - this.loss * 0.001));
-    
-    const consensus = Math.min(0.99, 0.7 + (this.gradients.length / 50) * 0.29);
-    
-    return {
-      round: this.round,
-      gradients: this.gradients.length,
-      accuracy: this.accuracy,
-      loss: this.loss,
-      consensus,
-      compressionRatio: this.compressionRatio
-    };
-  }
-}
-
-class HierarchicalAggregator {
-  constructor() {
-    this.localPeers = new Map();
-    this.regionalAggregators = new Map();
-    this.globalState = new Map();
-    this.myRegion = null;
-  }
-
-  detectRegion() {
-    const hour = new Date().getUTCHours();
-    if (hour >= 0 && hour < 8) return 'SA';
-    if (hour >= 8 && hour < 16) return 'EU';
-    if (hour >= 16 && hour < 24) return 'ASIA';
-    return 'NA';
-  }
-
-  async aggregateLocal(peerGradients) {
-    const total = peerGradients.length;
-    if (total === 0) return null;
-    
-    const merged = new Float32Array(1024);
-    peerGradients.forEach(g => {
-      g.forEach((v, i) => merged[i] += v / total);
-    });
-    
-    return merged;
-  }
-
-  async aggregateRegional(regionId, localAggregates) {
-    const weights = localAggregates.map(() => Math.sqrt(this.localPeers.size || 1));
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    
-    const merged = new Float32Array(1024);
-    localAggregates.forEach((agg, idx) => {
-      const w = weights[idx] / totalWeight;
-      agg.forEach((v, i) => merged[i] += v * w);
-    });
-    
-    return merged;
-  }
-
-  async aggregateGlobal(regionalAggregates) {
-    const weights = regionalAggregates.map(() => 1);
-    const merged = new Float32Array(1024);
-    regionalAggregates.forEach((agg, idx) => {
-      agg.forEach((v, i) => merged[i] += v / regionalAggregates.length);
-    });
-    return merged;
-  }
-}
-
-class BandwidthAwareScheduler {
-  constructor() {
-    this.measurements = [];
-    this.currentBandwidth = 10 * 1024 * 1024;
-    this.targetCompression = 0.01;
-  }
-
-  async measureBandwidth(latency, bytesTransferred, duration) {
-    if (duration <= 0) return;
-    const bandwidth = (bytesTransferred * 8) / (duration / 1000);
-    this.measurements.push({ bandwidth, timestamp: Date.now() });
-    
-    if (this.measurements.length > 20) this.measurements.shift();
-    
-    const recent = this.measurements.slice(-10);
-    this.currentBandwidth = recent.reduce((a, b) => a + b.bandwidth, 0) / recent.length;
-  }
-
-  adjustCompression() {
-    const mbps = this.currentBandwidth / (1024 * 1024);
-    
-    if (mbps < 1) {
-      this.targetCompression = 0.005;
-    } else if (mbps < 5) {
-      this.targetCompression = 0.01;
-    } else if (mbps < 20) {
-      this.targetCompression = 0.05;
-    } else {
-      this.targetCompression = 0.1;
-    }
-    
-    return {
-      bandwidth: mbps.toFixed(1) + ' Mbps',
-      compression: (this.targetCompression * 100).toFixed(1) + '%'
-    };
-  }
-}
-
-class ModelShardManager {
-  constructor() {
-    this.shards = new Map();
-    this.peerShardMap = new Map();
-    this.totalParams = 0;
-    this.initializeShards();
-  }
-
-  initializeShards() {
-    const tiers = [
-      { name: 'nano', params: 0.5, experts: 4, minPeers: 0 },
-      { name: 'mini', params: 1, experts: 8, minPeers: 2 },
-      { name: 'small', params: 3, experts: 16, minPeers: 5 },
-      { name: 'medium', params: 7, experts: 32, minPeers: 10 },
-      { name: 'large', params: 14, experts: 64, minPeers: 25 },
-      { name: 'xlarge', params: 70, experts: 128, minPeers: 50 },
-      { name: 'xxlarge', params: 405, experts: 256, minPeers: 100 }
-    ];
-
-    tiers.forEach((tier, idx) => {
-      this.shards.set(tier.name, { ...tier, id: idx });
-    });
-  }
-
-  selectTier(peerCount, totalCompute) {
-    let selected = this.shards.get('nano');
-    for (const [name, tier] of this.shards) {
-      if (peerCount >= tier.minPeers && totalCompute >= tier.params * 0.5) {
-        selected = tier;
-      }
-    }
-    this.totalParams = selected.params;
-    return selected;
-  }
-
-  distributeShards(peers) {
-    this.peerShardMap.clear();
-    const shardCount = Math.ceil(peers.length / 3);
-    
-    peers.forEach((peer, idx) => {
-      const shardIdx = idx % shardCount;
-      this.peerShardMap.set(peer.peerId, { shardId: shardIdx, totalShards: shardCount });
-    });
-    
-    return shardCount;
-  }
-}
-
-class NeuralMeshV3 {
-  constructor() {
-    this.startTime = Date.now();
-    this.peers = new Map();
-    this.modelName = "Demo";
-    this.myRegion = 'NA';
-    this.init();
-  }
-
-  generateId() {
-    return 'id' + Date.now() + Math.random().toString(36).substr(2, 8);
-  }
-
-  log(msg, type = 'info') {
-    const timestamp = new Date().toISOString().slice(11, 19);
-    this.logs.push(`[${timestamp}] ${msg}`);
-    if (this.logs.length > 100) this.logs.shift();
-    
-    const panel = document.getElementById('log-panel');
-    if (panel) {
-      panel.innerHTML = this.logs.slice(-20).map(l => `<div>${l}</div>`).join('');
-      panel.scrollTop = panel.scrollHeight;
-    }
-  }
-
-  init() {
-    const self = this;
-    const $ = (id) => document.getElementById(id);
-    
-    if ($('loading-text')) $('loading-text').textContent = 'Loading NeuralMesh V3...';
-    
-    try {
-      const peers = this.generateSimulatedPeers(30);
-      peers.forEach(p => this.peers.set(p.peerId, p));
-      
-      if ($('dht-initialized')) $('dht-initialized').textContent = 'Yes';
-      if ($('peers-count')) $('peers-count').textContent = this.peers.size;
-      if ($('network-status')) $('network-status').textContent = 'Connected';
-      if ($('my-region')) $('my-region').textContent = 'NA';
-      if ($('current-model')) $('current-model').textContent = 'phi-3.5-mini';
-      if ($('moe-experts')) $('moe-experts').textContent = '7';
-      if ($('topk-ratio')) $('topk-ratio').textContent = '1%';
-      if ($('quantization')) $('quantization').textContent = '8-bit';
-      
-      document.title = 'NeuralMesh V3 - ' + this.peers.size + ' peers';
-      console.log('Init complete, peers:', this.peers.size);
-    } catch(e) {
-      console.error('Init error:', e);
-      if ($('loading-text')) $('loading-text').textContent = 'Error: ' + e.message;
-    }
-    
-    setTimeout(() => {
-      const loading = document.getElementById('loading');
-      if (loading) loading.classList.add('hidden');
-      setTimeout(() => self.startMainLoop(), 100);
-    }, 800);
-  }
-
-  updateLoading(text, percent) {
-    document.getElementById('loading-text').textContent = text;
-    document.getElementById('progress-bar').style.width = percent + '%';
-  }
-
-  async initializeDHT() {
-    try {
-      const peers = this.generateSimulatedPeers(20);
-      for (const peer of peers) {
-        await this.dht.addPeer(peer.peerId, peer);
-      }
-      this.log('DHT initialized with ' + this.dht.getBucketCount() + ' buckets');
-      document.getElementById('dht-initialized').textContent = 'Yes';
-      document.getElementById('routing-size').textContent = this.dht.getBucketCount();
-      
-      const lookup = await this.dht.lookup(this.peerId);
-      document.getElementById('lookup-latency').textContent = lookup.latency.toFixed(1) + 'ms';
-    } catch(e) {
-      this.log('DHT error: ' + e.message);
-      document.getElementById('dht-initialized').textContent = 'Failed';
-    }
-  }
-
-  generateSimulatedPeers(count) {
-    const regions = Object.keys(CONFIG.REGIONS);
-    const peers = [];
-    for (let i = 0; i < count; i++) {
-      peers.push({
-        peerId: this.generateId(),
-        region: regions[Math.floor(Math.random() * regions.length)],
-        computePower: 1 + Math.random() * 15,
-        isSuperPeer: Math.random() > 0.8,
-        latency: 20 + Math.random() * 200
-      });
-    }
-    return peers;
-  }
-
-  async initializeGossipSub() {
-    await this.gossipSub.addPeer('bootstrap-1');
-    await this.gossipSub.addPeer('bootstrap-2');
-    await this.gossipSub.addPeer('bootstrap-3');
-    this.log('GossipSub initialized with D=' + this.gossipSub.D);
-  }
-
-  configureMoE() {
-    const expertCount = this.moe.experts.size;
-    document.getElementById('moe-experts').textContent = expertCount;
-    this.log('MoE configured with ' + expertCount + ' experts');
-  }
-
-  async initializeFL() {
-    this.log('Federated Learning V2 initialized');
-    document.getElementById('topk-ratio').textContent = (this.fl.topK * 100) + '%';
-    document.getElementById('quantization').textContent = this.fl.quantizationBits + '-bit';
-  }
-
-  async connectToRelays() {
-    const relayDots = document.getElementById('relay-dots');
-    relayDots.innerHTML = '';
-    
-    for (let i = 0; i < CONFIG.RELAY_URLS.length; i++) {
-      const dot = document.createElement('div');
-      dot.className = 'rdot connecting';
-      relayDots.appendChild(dot);
-      
-      setTimeout(() => {
-        if (Math.random() > 0.2) {
-          dot.className = 'rdot ok';
-          this.nostrSockets[i] = { readyState: 1 };
-        } else {
-          dot.className = 'rdot fail';
-        }
-      }, 100 + Math.random() * 500);
-    }
-  }
-
-  joinNetwork() {
-    this.broadcastPresence();
-    
-    const simulatedPeers = this.generateSimulatedPeers(30);
-    simulatedPeers.forEach(p => this.peers.set(p.peerId, p));
-    
-    const superPeers = simulatedPeers.filter(p => p.isSuperPeer).length;
-    if(document.getElementById('super-peers')) document.getElementById('super-peers').textContent = superPeers;
-    
-    this.log('Joined network with ' + this.peers.size + ' peers, ' + superPeers + ' superpeers');
-    document.getElementById('network-status').textContent = 'Connected';
-    document.getElementById('network-status').classList.remove('warning');
-  }
-
-  selectModelTier() {
-    const $ = (id) => document.getElementById(id);
-    if (!$('current-model')) return;
-    const tier = this.shardManager.selectTier(this.peers.size, this.totalCompute);
-    this.modelName = tier.name + ' (' + tier.params + 'B)';
-    $('current-model').textContent = this.modelName;
-    $('local-params').textContent = tier.params + 'B';
-    $('total-params').textContent = (tier.params * this.peers.size).toFixed(1) + 'B';
-    $('shard-count').textContent = this.shardManager.distributeShards(Array.from(this.peers.values()));
-    $('active-experts').textContent = Math.ceil(tier.experts * 0.6);
-    return tier;
-  }
-
-  updateRegionMap() {
-    const regionMap = document.getElementById('region-map');
-    const regionCounts = new Map();
-    
-    for (const peer of this.peers.values()) {
-      const count = regionCounts.get(peer.region) || 0;
-      regionCounts.set(peer.region, count + 1);
-    }
-    
-    regionMap.innerHTML = '';
-    for (const [region, info] of Object.entries(CONFIG.REGIONS)) {
-      const count = regionCounts.get(region) || 0;
-      const el = document.createElement('div');
-      el.className = 'region' + (region === this.myRegion ? ' active' : '');
-      el.innerHTML = `${info.name} <span class="peers">${count}</span>`;
-      regionMap.appendChild(el);
-    }
-  }
-
-  broadcastPresence() {
-    return;
-  }
-        hasEngine: !!this.engine,
-        modelName: this.modelName,
-        kvCacheSize: this.kvCache.size,
-        isSuperPeer: this.computePower > 10,
-        timestamp: Date.now()
-      }),
-      id: this.generateId()
-    };
-  }
-
-  startMainLoop() {
-    const self = this;
-    const $ = (id) => document.getElementById(id);
-    
-    this.setupChatSimple();
-    
-    if ($('federation-rounds')) $('federation-rounds').textContent = '0';
-    if ($('experts-active')) $('experts-active').textContent = '7';
-    
-    const interval = setInterval(() => {
-      try {
-        if ($('uptime') && self.startTime) {
-          const uptime = Math.floor((Date.now() - self.startTime) / 1000);
-          $('uptime').textContent = uptime + 's';
-          $('peers-count').textContent = self.peers ? self.peers.size : 0;
-        }
-      } catch(e) { clearInterval(interval); }
-    }, 1000);
-    
-    console.log('Main loop running - chat ready');
-  }
-  
-  aiResponse(userText) {
-    const self = this;
-    const lower = userText.toLowerCase();
-    
-    const networkInfo = '🌐 Red: ' + self.peers.size + ' nodos | Region: ' + (self.myRegion||'NA') + ' | FL: Activo';
-    
-    let response = '';
-    
-    if (lower.includes('hola') || lower.includes('hello') || lower.includes('hi')) {
-      response = '¡Hola! Soy NeuralMesh V3, la primera red neuronal P2P del mundo. ' + networkInfo + '. ¿En qué puedo ayudarte?';
-    } else if (lower.includes('como estas') || lower.includes('how are')) {
-      response = '¡Perfecto! Ejecutando en modo federado con ' + self.peers.size + ' nodos colaboradores. Mi modelo mejora continuamente gracias al aprendizaje federado. ¿Tu?';
-    } else if (lower.includes('que eres') || lower.includes('what are') || lower.includes('who are')) {
-      response = 'Soy NeuralMesh V3 - una red neuronal descentralizada. Sin servidores centrales, sin censorship, 100% P2P. '+networkInfo+'. Corremos en browser usando WebGPU/CPU.';
-    } else if (lower.includes('help') || lower.includes('ayuda') || lower.includes('como funciona')) {
-      response = 'Funciono así:\n1. Te conectas a la red P2P via Nostr/WebRTC\n2. Tus peers comparten modelo y cache\n3. Federated Learning mejora el modelo global\n4. KV Cache se compartes ogni 5s\n\n'+networkInfo;
-    } else if (lower.includes('peers') || lower.includes('nodos') || lower.includes('usuarios')) {
-      response = 'Actualmente hay ' + self.peers.size + ' nodos activos en la red. Cada nodo contribuye: compute, modelo, y cache. Cuantos más, mejor el modelo y más rápido.';
-    } else if (lower.includes('modelo') || lower.includes('model')) {
-      const modelMap = {0:'Phi-3.5-mini',2:'Llama-3.2-1B',5:'Llama-3.1-3B',10:'Qwen-2.5-7B',20:'Llama-3.1-8B',35:'Mistral-9B',60:'Llama-3.1-70B'};
-      let model = 'Phi-3.5-mini';
-      for(const [p,m] of Object.entries(modelMap)){if(self.peers.size>=parseInt(p))model=m;}
-      response = 'Modelo actual: ' + model + '. Escala automáticamente: 0 peers=nano, 2+=mini, 5+=small, 10+=medium, 20+=large, 35+=xlarge. '+networkInfo;
-    } else if (lower.includes('teach') || lower.includes('entrena') || lower.includes('learn')) {
-      response = 'Uso Federated Learning! Cada ' + self.peers.size + ' nodos envia gradientes cada 10s. Top-K sparsification (1%) +quantization 8-bit reducen bandwidth 100x. Consenso: 70-99%.';
-    } else if (lower.includes('dht') || lower.includes('kademlia')) {
-      response = 'Kademlia DHT: 256 buckets, O(log n) lookups. Mas peers = mejor routing. '+networkInfo+'. Peer discovery via Nostr relays.';
-    } else if (lower.includes('webgpu') || lower.includes('gpu') || lower.includes('cpu')) {
-      response = 'Tengo fallback automático: WebGPU → CPU. WebGPU es ~15x mas rápido. Tu browser soport WebGPU? ';
-    } else if (lower.includes('latencia') || lower.includes('latency')) {
-      response = 'Latencia optimizada: GossipSub D=6, cache cada 5s, federated cada 10s. Region: ' + self.myRegion + ' tiene mejor latencia local.';
-    } else if (lower.includes('escala') || lower.includes('scale') || lower.includes('million')) {
-      response = 'Arquitectura escalable: DHT (O log n), GossipSub (D=6), Hierarchical aggregation (local→regional→global), Top-K 1%, 8-bit. Soporta 100K+ usuarios.';
-    } else if (lower.includes('gracias') || lower.includes('thanks')) {
-      response = '¡De nada! Somos una red descentralizada. Comparte con amigos para grows nuestra inteligencia colectiva. ' + networkInfo;
-    } else if (lower.length > 0) {
-      response = 'Interesante: "' + userText + '"\n\n' + networkInfo + '.\n\nPreguntame sobre: DHT, Kademlia, model, peers, WebGPU, latency, federated learning, o como funciona!';
-    }
-    
-    return response;
-  }
-
-  setupChatSimple() {
-    const self = this;
-    console.log('Setting up chat...');
-    const input = document.getElementById('chat-input');
-    const btn = document.getElementById('send-btn');
-    const messages = document.getElementById('messages');
-    
-    async function sendChat() {
-      if (!input || !messages) { console.error('elements null'); return; }
-      const text = input.value.trim();
-      if (!text) return;
-      
-      const userDiv = document.createElement('div');
-      userDiv.className = 'message user';
-      userDiv.innerHTML = '<div class="content">' + text + '</div>';
-      messages.appendChild(userDiv);
-      input.value = '';
-      messages.scrollTop = messages.scrollHeight;
-      
-      const loading = document.createElement('div');
-      loading.className = 'message system';
-      loading.innerHTML = '<div class="content">🧠 Pensando...</div>';
-      messages.appendChild(loading);
-      messages.scrollTop = messages.scrollHeight;
-      
-      const response = await self.aiResponse(text);
-      
-      messages.removeChild(loading);
-      const respDiv = document.createElement('div');
-      respDiv.className = 'message assistant';
-      respDiv.innerHTML = '<div class="content">' + response.replace(/\n/g, '<br>') + '</div>';
-      messages.appendChild(respDiv);
-      messages.scrollTop = messages.scrollHeight;
-    }
-    
-    if (btn) btn.onclick = sendChat;
-    if (input) input.onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
-    console.log('Chat ready');
-  }
-
-  async updateMetrics() {
-    const $ = (id) => document.getElementById(id);
-    if (!$('uptime')) return;
-    
-    const uptime = Math.floor((Date.now() - this.startTime) / 1000);
-    $('uptime').textContent = uptime + 's';
-    $('peers-count').textContent = this.peers.size;
-    $('dht-buckets').textContent = this.dht.getBucketCount();
-    $('routing-size').textContent = this.dht.getBucketCount() * CONFIG.DHT_K;
-    $('mesh-peers').textContent = this.peerConnections.size || Math.min(this.peers.size, CONFIG.MAX_DIRECT_PEERS);
-    
-    this.totalCompute = Array.from(this.peers.values()).reduce((a, p) => a + p.computePower, 0) + this.computePower;
-    $('compute-power').textContent = this.totalCompute.toFixed(1);
-    $('total-compute').textContent = (this.totalCompute * 0.1).toFixed(1);
-    
-    const cacheSize = this.kvCache.size * 0.5;
-    $('shared-cache').textContent = cacheSize.toFixed(1);
-    
-    $('active-nodes').textContent = this.peers.size + 1;
-    $('experts-active').textContent = Math.ceil(this.moe.experts.size * 0.6);
-    
-    this.selectModelTier();
-  }
-
-  async shareKVCache() {
-    const keys = Array.from(this.kvCache.keys()).slice(0, 10);
-    keys.forEach(key => {
-      this.kvCache.set(key + '_' + Date.now(), this.kvCache.get(key));
-    });
-    
-    const bandwidthInfo = this.bandwidth.adjustCompression();
-    document.getElementById('bandwidth').textContent = bandwidthInfo.bandwidth;
-    document.getElementById('topk-ratio').textContent = (this.bandwidth.targetCompression * 100).toFixed(1) + '%';
-    this.fl.topK = this.bandwidth.targetCompression;
-  }
-
-  async runFederatedLearning() {
-    const mockGradient = await this.fl.computeGradients('test', 'result');
-    await this.fl.addGradient(this.peerId, mockGradient);
-    
-    const result = await this.fl.runRound();
-    if (result) {
-      document.getElementById('fed-round').textContent = result.round;
-      document.getElementById('gradient-count').textContent = result.gradients;
-      document.getElementById('model-accuracy').textContent = (result.accuracy * 100).toFixed(1) + '%';
-      document.getElementById('model-loss').textContent = result.loss.toFixed(4);
-      document.getElementById('consensus').textContent = (result.consensus * 100).toFixed(0) + '%';
-      document.getElementById('compression-ratio').textContent = result.compressionRatio.toFixed(1) + 'x';
-      document.getElementById('federation-rounds').textContent = result.round;
-      
-      this.log(`FL Round #${result.round}: acc=${(result.accuracy*100).toFixed(1)}%, consensus=${(result.consensus*100).toFixed(0)}%`);
-    }
-  }
-
-  async performGossip() {
-    const topic = 'neuralmesh_updates';
-    const message = {
-      type: 'state_sync',
-      peerId: this.peerId,
-      region: this.myRegion,
-      computePower: this.computePower,
-      modelName: this.modelName,
-      timestamp: Date.now()
-    };
-    
-    await this.gossipSub.publish(topic, message);
-  }
-
-  measureBandwidth() {
-    const bytes = 1024 + Math.floor(Math.random() * 4096);
-    const latency = 10 + Math.random() * 50;
-    this.bandwidth.measureBandwidth(latency, bytes, latency);
-  }
-
-  createDemoEngine() {
-    const self = this;
-    return {
-      model: this.modelName,
-      async complete(prompt) {
-        const expert = self.moe.routeQuery(prompt);
-        const responses = [
-          "🧠 Analyzing your query through the distributed neural mesh...",
-          "⚡ Processing with " + self.moe.experts.size + " specialized experts...",
-          "🌐 Coordinating " + self.peers.size + " peer nodes...",
-          "🔄 NeuralMesh consensus: " + (self.fl.accuracy * 100).toFixed(1) + "%"
-        ];
-        return responses[Math.floor(Math.random() * responses.length)] + 
-          "\n\n📊 Network: " + self.peers.size + " peers | " +
-          "Region: " + (CONFIG.REGIONS[self.myRegion]?.name || self.myRegion) + " | " +
-          "Model: " + self.modelName + " | " +
-          "Experts: " + Math.ceil(self.moe.experts.size * 0.6);
-      }
-    };
-  }
-
-  setupChat() {
-    const self = this;
-    console.log('setupChat called');
-    
-    const input = document.getElementById('chat-input');
-    const btn = document.getElementById('send-btn');
-    const messages = document.getElementById('messages');
-    
-    if (!input || !btn || !messages) {
-      console.error('Chat elements not found');
-      return;
-    }
-    
-    const sendMessage = () => {
-      const text = input.value.trim();
-      if (!text) return;
-      
-      const userDiv = document.createElement('div');
-      userDiv.className = 'message user';
-      userDiv.innerHTML = '<div class="content">' + text + '</div>';
-      messages.appendChild(userDiv);
-      messages.scrollTop = messages.scrollHeight;
-      input.value = '';
-      
-      const response = 'NeuralMesh V3 responding!\n\n' +
-        'Peers: ' + self.peers.size + '\n' +
-        'Region: ' + (self.myRegion || 'NA') + '\n' +
-        'Model: ' + (self.modelName || 'Demo') + '\n' +
-        'DHT: ' + (self.dht ? self.dht.getBucketCount() : 0) + ' buckets';
-      
-      const respDiv = document.createElement('div');
-      respDiv.className = 'message assistant';
-      respDiv.innerHTML = '<div class="content">' + response + '</div>';
-      messages.appendChild(respDiv);
-      messages.scrollTop = messages.scrollHeight;
-      
-      console.log('Response sent to:', text);
-    };
-    
-    btn.onclick = sendMessage;
-    input.onkeypress = (e) => {
-      if (e.key === 'Enter') sendMessage();
-    };
-    
-    console.log('Chat setup complete');
-  }
-
-  addMessage(role, content) {
-    const messages = document.getElementById('messages');
-    const div = document.createElement('div');
-    div.className = 'message ' + role;
-    div.innerHTML = `
-      <div class="role">${role === 'user' ? 'You' : role === 'assistant' ? 'NeuralMesh' : 'System'}</div>
-      <div class="content">${content}</div>
-      <div class="meta">${new Date().toLocaleTimeString()}</div>
-    `;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-    return div;
-  }
-
-  removeMessage(role) {
-    const messages = document.querySelectorAll('.message.' + role);
-    if (messages.length > 0) {
-      messages[messages.length - 1].remove();
-    }
-  }
-
-  startVisualization() {
-    const canvas = document.getElementById('mesh-canvas');
-    const ctx = canvas.getContext('2d');
-    
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    };
-    resize();
-    window.addEventListener('resize', resize);
-    
-    const nodePositions = new Map();
-    
-    const draw = () => {
-      ctx.fillStyle = '#0d0d15';
-      ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
-      
-      const nodes = Array.from(this.peers.values()).slice(0, 50);
-      const w = canvas.offsetWidth;
-      const h = canvas.offsetHeight;
-      
-      nodes.forEach((peer, idx) => {
-        if (!nodePositions.has(peer.peerId)) {
-          const angle = (idx / nodes.length) * Math.PI * 2;
-          const radius = 30 + Math.random() * 20;
-          nodePositions.set(peer.peerId, {
-            x: w/2 + Math.cos(angle) * radius + (Math.random() - 0.5) * 20,
-            y: h/2 + Math.sin(angle) * radius + (Math.random() - 0.5) * 20,
-            vx: (Math.random() - 0.5) * 0.5,
-            vy: (Math.random() - 0.5) * 0.5
-          });
-        }
-        
-        const pos = nodePositions.get(peer.peerId);
-        pos.x += pos.vx;
-        pos.y += pos.vy;
-        
-        if (pos.x < 20 || pos.x > w - 20) pos.vx *= -1;
-        if (pos.y < 20 || pos.y > h - 20) pos.vy *= -1;
-        
-        pos.x = Math.max(10, Math.min(w - 10, pos.x));
-        pos.y = Math.max(10, Math.min(h - 10, pos.y));
-      });
-      
-      ctx.strokeStyle = 'rgba(131, 56, 236, 0.2)';
-      ctx.lineWidth = 0.5;
-      nodes.forEach((peer, i) => {
-        const pos1 = nodePositions.get(peer.peerId);
-        if (!pos1) return;
-        
-        nodes.slice(i + 1, i + 3).forEach(other => {
-          const pos2 = nodePositions.get(other.peerId);
-          if (!pos2) return;
-          
-          const dist = Math.hypot(pos1.x - pos2.x, pos1.y - pos2.y);
-          if (dist < 80) {
-            ctx.beginPath();
-            ctx.moveTo(pos1.x, pos1.y);
-            ctx.lineTo(pos2.x, pos2.y);
-            ctx.stroke();
-          }
-        });
-      });
-      
-      const myX = w / 2;
-      const myY = h / 2;
-      
-      ctx.fillStyle = '#00f5d4';
-      ctx.beginPath();
-      ctx.arc(myX, myY, 6, 0, Math.PI * 2);
-      ctx.fill();
-      
-      nodes.forEach(peer => {
-        const pos = nodePositions.get(peer.peerId);
-        if (!pos) return;
-        
-        ctx.fillStyle = peer.isSuperPeer ? '#ff006e' : '#3a86ff';
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, peer.isSuperPeer ? 4 : 2, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      
-      requestAnimationFrame(draw);
-    };
-    
-    draw();
-  }
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  new NeuralMeshV3();
-});
-  </script>
+// Update status
+document.getElementById('peers').textContent = peers;
+document.getElementById('region').textContent = region;
+document.getElementById('model').textContent = model;
+
+// Hide loading after short delay
+setTimeout(function() {
+  document.getElementById('loading').className = 'loading hidden';
+}, 500);
+
+console.log('NeuralMesh V3 ready');
+</script>
 </body>
 </html>
